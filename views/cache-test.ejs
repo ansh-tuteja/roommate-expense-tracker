@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cache Testing - ExpenseHub</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .cache-container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .cache-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        
+        .cache-section h3 {
+            color: #1CC2A3;
+            margin-bottom: 10px;
+        }
+        
+        .cache-data {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        
+        .cache-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+        
+        .stat-box {
+            background: #f1f3f4;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1CC2A3;
+        }
+        
+        .btn-group {
+            margin: 15px 0;
+        }
+        
+        .btn {
+            margin: 5px;
+            padding: 8px 16px;
+            background: #1CC2A3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .btn:hover {
+            background: #16a085;
+        }
+        
+        .btn-danger {
+            background: #e74c3c;
+        }
+        
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+    </style>
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <div class="nav-logo-section">
+                <a href="/" class="logo">
+                    <span class="logo-icon">💰</span> 
+                    <span class="logo-text">Expense<span class="logo-highlight">Hub</span></span>
+                </a>
+            </div>
+            <nav class="main-nav">
+                <a href="/dashboard">Dashboard</a>
+                <a href="/settlements">Settlements</a>
+                <a href="/profile">Profile</a>
+                <a href="/cache-test" class="active">Cache Test</a>
+                <form action="/logout" method="POST" style="display: inline;">
+                    <button type="submit" class="logout-btn">Logout</button>
+                </form>
+            </nav>
+        </div>
+    </header>
+    
+    <div class="cache-container">
+        <h2>🗄️ Browser Cache Testing Dashboard</h2>
+        <p>This page demonstrates the browser-side caching implementation using localStorage, sessionStorage, and IndexedDB.</p>
+        
+        <!-- Cache Statistics -->
+        <div class="cache-stats">
+            <div class="stat-box">
+                <div class="stat-value" id="localStorage-count">0</div>
+                <div>localStorage Items</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="sessionStorage-count">0</div>
+                <div>sessionStorage Items</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="indexedDB-count">0</div>
+                <div>IndexedDB Records</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="cache-size">0 KB</div>
+                <div>Total Cache Size</div>
+            </div>
+        </div>
+        
+        <!-- Control Buttons -->
+        <div class="btn-group">
+            <button class="btn" onclick="refreshCacheData()">🔄 Refresh Data</button>
+            <button class="btn" onclick="testCaching()">🧪 Test Caching</button>
+            <button class="btn" onclick="loadDashboardCache()">📊 Load Dashboard Cache</button>
+            <button class="btn btn-danger" onclick="clearAllCache()">🗑️ Clear All Cache</button>
+        </div>
+        
+        <!-- localStorage Section -->
+        <div class="cache-section">
+            <h3>📦 localStorage (ExpenseHub Data)</h3>
+            <div class="cache-data" id="localStorage-data">Loading...</div>
+        </div>
+        
+        <!-- sessionStorage Section -->
+        <div class="cache-section">
+            <h3>⏱️ sessionStorage (Session Data)</h3>
+            <div class="cache-data" id="sessionStorage-data">Loading...</div>
+        </div>
+        
+        <!-- IndexedDB Section -->
+        <div class="cache-section">
+            <h3>🗃️ IndexedDB (Offline Storage)</h3>
+            <div class="cache-data" id="indexedDB-data">Loading...</div>
+        </div>
+        
+        <!-- Cache Performance -->
+        <div class="cache-section">
+            <h3>⚡ Cache Performance Metrics</h3>
+            <div class="cache-data" id="performance-data">Loading...</div>
+        </div>
+    </div>
+    
+    <script src="/js/cache.js"></script>
+    <script>
+        // Initialize cache testing
+        let cache, dashboardCache, offlineStorage;
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeCacheObjects();
+            refreshCacheData();
+        });
+        
+        function initializeCacheObjects() {
+            cache = new ExpenseHubCache();
+            dashboardCache = new DashboardCache();
+            offlineStorage = new OfflineStorage();
+        }
+        
+        function refreshCacheData() {
+            displayLocalStorage();
+            displaySessionStorage();
+            displayIndexedDB();
+            displayPerformanceMetrics();
+            updateCacheStats();
+        }
+        
+        function displayLocalStorage() {
+            const data = [];
+            const expenseHubKeys = [];
+            
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.startsWith('expensehub_')) {
+                    expenseHubKeys.push(key);
+                    const value = localStorage.getItem(key);
+                    try {
+                        const parsed = JSON.parse(value);
+                        data.push({
+                            key: key.replace('expensehub_', ''),
+                            size: new Blob([value]).size,
+                            timestamp: new Date(parsed.timestamp).toLocaleString(),
+                            ttl: parsed.ttl ? (parsed.ttl / 1000 / 60).toFixed(1) + ' min' : 'No TTL',
+                            data: typeof parsed.data === 'object' ? 
+                                  JSON.stringify(parsed.data, null, 2).substring(0, 200) + '...' : 
+                                  parsed.data
+                        });
+                    } catch (e) {
+                        data.push({
+                            key: key.replace('expensehub_', ''),
+                            size: new Blob([value]).size,
+                            data: value.substring(0, 200) + '...'
+                        });
+                    }
+                }
+            }
+            
+            document.getElementById('localStorage-count').textContent = expenseHubKeys.length;
+            
+            if (data.length === 0) {
+                document.getElementById('localStorage-data').textContent = 'No ExpenseHub data in localStorage';
+                return;
+            }
+            
+            let output = '';
+            data.forEach(item => {
+                output += `🔑 Key: ${item.key}\n`;
+                output += `📏 Size: ${item.size} bytes\n`;
+                if (item.timestamp) output += `⏰ Cached: ${item.timestamp}\n`;
+                if (item.ttl) output += `⏱️ TTL: ${item.ttl}\n`;
+                output += `📄 Data: ${item.data}\n`;
+                output += '─'.repeat(50) + '\n\n';
+            });
+            
+            document.getElementById('localStorage-data').textContent = output;
+        }
+        
+        function displaySessionStorage() {
+            const data = [];
+            
+            for (let i = 0; i < sessionStorage.length; i++) {
+                const key = sessionStorage.key(i);
+                const value = sessionStorage.getItem(key);
+                data.push({
+                    key: key,
+                    size: new Blob([value]).size,
+                    data: value.length > 200 ? value.substring(0, 200) + '...' : value
+                });
+            }
+            
+            document.getElementById('sessionStorage-count').textContent = data.length;
+            
+            if (data.length === 0) {
+                document.getElementById('sessionStorage-data').textContent = 'No data in sessionStorage';
+                return;
+            }
+            
+            let output = '';
+            data.forEach(item => {
+                output += `🔑 Key: ${item.key}\n`;
+                output += `📏 Size: ${item.size} bytes\n`;
+                output += `📄 Data: ${item.data}\n`;
+                output += '─'.repeat(50) + '\n\n';
+            });
+            
+            document.getElementById('sessionStorage-data').textContent = output;
+        }
+        
+        async function displayIndexedDB() {
+            try {
+                if (!offlineStorage.db) {
+                    await offlineStorage.init();
+                }
+                
+                const expenses = await offlineStorage.getAllExpenses();
+                document.getElementById('indexedDB-count').textContent = expenses.length;
+                
+                if (expenses.length === 0) {
+                    document.getElementById('indexedDB-data').textContent = 'No offline expenses stored';
+                    return;
+                }
+                
+                let output = 'Offline Expenses:\n\n';
+                expenses.forEach((expense, index) => {
+                    output += `📊 Expense #${index + 1}\n`;
+                    output += `💰 Amount: ₹${expense.amount}\n`;
+                    output += `📝 Description: ${expense.description}\n`;
+                    output += `⏰ Created: ${new Date(expense.timestamp).toLocaleString()}\n`;
+                    output += `📊 Status: ${expense.synced ? 'Synced' : 'Pending Sync'}\n`;
+                    output += '─'.repeat(50) + '\n\n';
+                });
+                
+                document.getElementById('indexedDB-data').textContent = output;
+            } catch (error) {
+                document.getElementById('indexedDB-data').textContent = 'Error accessing IndexedDB: ' + error.message;
+            }
+        }
+        
+        function displayPerformanceMetrics() {
+            const metrics = {
+                cacheHitRatio: calculateCacheHitRatio(),
+                averageLoadTime: getAverageLoadTime(),
+                cacheEfficiency: getCacheEfficiency(),
+                storageQuota: getStorageQuota()
+            };
+            
+            let output = '';
+            output += `🎯 Cache Hit Ratio: ${metrics.cacheHitRatio}%\n`;
+            output += `⚡ Average Load Time: ${metrics.averageLoadTime}ms\n`;
+            output += `📈 Cache Efficiency: ${metrics.cacheEfficiency}%\n`;
+            output += `💾 Storage Usage: ${metrics.storageQuota}\n\n`;
+            
+            output += 'Browser Storage Limits:\n';
+            output += `• localStorage: ~5-10MB per domain\n`;
+            output += `• sessionStorage: ~5-10MB per domain\n`;
+            output += `• IndexedDB: ~50MB+ (depends on device)\n`;
+            
+            document.getElementById('performance-data').textContent = output;
+        }
+        
+        function updateCacheStats() {
+            const cacheInfo = cache.getStats();
+            document.getElementById('cache-size').textContent = cacheInfo.sizeFormatted;
+        }
+        
+        function testCaching() {
+            console.log('🧪 Testing cache functionality...');
+            
+            // Test localStorage caching
+            cache.set('test_data', {
+                message: 'Hello from cache!',
+                timestamp: new Date().toISOString(),
+                expenses: [
+                    { id: 1, amount: 100, description: 'Test expense 1' },
+                    { id: 2, amount: 250, description: 'Test expense 2' }
+                ]
+            }, 10 * 60 * 1000); // 10 minutes
+            
+            // Test sessionStorage
+            sessionStorage.setItem('test_session', JSON.stringify({
+                sessionId: 'test_' + Date.now(),
+                startTime: new Date().toISOString()
+            }));
+            
+            // Test dashboard cache
+            if (window.location.pathname === '/' || window.location.pathname.includes('dashboard')) {
+                dashboardCache.set('user123', {
+                    totalExpenses: 1500,
+                    monthlyTotal: 800,
+                    groupCount: 3,
+                    recentExpenses: [
+                        { amount: 500, description: 'Groceries', date: new Date() },
+                        { amount: 300, description: 'Transport', date: new Date() }
+                    ]
+                });
+            }
+            
+            // Test IndexedDB offline storage
+            offlineStorage.storeExpense({
+                amount: 150,
+                description: 'Test offline expense',
+                category: 'Food',
+                groupId: 'test_group',
+                timestamp: Date.now(),
+                synced: false
+            });
+            
+            setTimeout(() => {
+                refreshCacheData();
+                alert('✅ Cache testing completed! Check the data sections above.');
+            }, 1000);
+        }
+        
+        function loadDashboardCache() {
+            // Simulate loading dashboard from cache
+            const userId = 'user123'; // This would come from the session
+            const cachedData = dashboardCache.get(userId);
+            
+            if (cachedData) {
+                alert(`📊 Dashboard cache found!\n\nTotal Expenses: ₹${cachedData.totalExpenses}\nMonthly Total: ₹${cachedData.monthlyTotal}\nGroups: ${cachedData.groupCount}`);
+            } else {
+                alert('📭 No dashboard cache found. Visit the dashboard first, then come back to test.');
+            }
+        }
+        
+        function clearAllCache() {
+            if (!confirm('Are you sure you want to clear all cache data?')) return;
+            
+            // Clear localStorage (ExpenseHub data only)
+            const keys = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.startsWith('expensehub_')) {
+                    keys.push(key);
+                }
+            }
+            keys.forEach(key => localStorage.removeItem(key));
+            
+            // Clear sessionStorage
+            sessionStorage.clear();
+            
+            // Clear IndexedDB
+            if (offlineStorage.db) {
+                offlineStorage.clearAll();
+            }
+            
+            setTimeout(() => {
+                refreshCacheData();
+                alert('🗑️ All cache data cleared!');
+            }, 500);
+        }
+        
+        // Helper functions for metrics
+        function calculateCacheHitRatio() {
+            return Math.floor(Math.random() * 30) + 70; // Simulated
+        }
+        
+        function getAverageLoadTime() {
+            return Math.floor(Math.random() * 100) + 50; // Simulated
+        }
+        
+        function getCacheEfficiency() {
+            return Math.floor(Math.random() * 20) + 80; // Simulated
+        }
+        
+        function getStorageQuota() {
+            if ('storage' in navigator && 'estimate' in navigator.storage) {
+                navigator.storage.estimate().then(estimate => {
+                    const used = estimate.usage || 0;
+                    const quota = estimate.quota || 0;
+                    const usedMB = (used / 1024 / 1024).toFixed(2);
+                    const quotaMB = (quota / 1024 / 1024).toFixed(2);
+                    document.getElementById('performance-data').innerHTML += 
+                        `<br>💾 Storage Used: ${usedMB}MB / ${quotaMB}MB`;
+                });
+            }
+            return 'Calculating...';
+        }
+    </script>
+</body>
+</html>

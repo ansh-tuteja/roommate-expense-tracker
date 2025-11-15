@@ -1,0 +1,232 @@
+<div class="settlements-container">
+  <div class="settlements-header">
+    <h1 class="settlements-title">
+      <span class="settlements-icon">🤝</span>
+      Settlements
+    </h1>
+    <p class="settlements-subtitle">
+      Manage all your payment settlements and requests across groups
+    </p>
+    <div class="settlements-stats">
+      <div class="stat-card pending">
+        <span class="stat-number"><%= summary.pending.count %></span>
+        <span class="stat-label">Pending</span>
+      </div>
+      <div class="stat-card completed">
+        <span class="stat-number"><%= summary.completed.count %></span>
+        <span class="stat-label">Completed</span>
+      </div>
+      <div class="stat-card rejected">
+        <span class="stat-number"><%= summary.rejected.count %></span>
+        <span class="stat-label">Rejected</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notifications Section -->
+  <% if (notifications && notifications.length > 0) { %>
+  <div class="notifications-section">
+    <div class="section-header">
+      <h3 class="section-title">
+        <span class="notification-icon">🔔</span>
+        Settlement Requests
+        <span class="notification-badge"><%= notifications.length %></span>
+      </h3>
+      <p class="section-subtitle">People want to settle up with you</p>
+    </div>
+    
+    <div class="notifications-grid">
+      <% notifications.forEach(notification => { %>
+      <div class="notification-card">
+        <div class="notification-header">
+          <div class="notification-info">
+            <strong><%= notification.debtorId.username %></strong> wants to settle
+            <div class="notification-details">
+              <span class="group-name"><%= notification.groupId ? notification.groupId.groupName : 'Cross-group settlement' %></span>
+              <span class="amount">₹<%= notification.amount.toFixed(2) %></span>
+            </div>
+          </div>
+          <div class="notification-time"><%= notification.timeAgo %></div>
+        </div>
+        
+        <div class="notification-description">
+          <p>"<%= notification.description || 'Settlement payment' %>"</p>
+          <% if (notification.notes) { %>
+            <p class="notes"><em>Note: <%= notification.notes %></em></p>
+          <% } %>
+        </div>
+        
+        <div class="notification-actions">
+          <button class="accept-settlement-btn action-btn action-btn-success" 
+                  data-settlement-id="<%= notification._id %>"
+                  data-amount="<%= notification.amount %>"
+                  data-debtor="<%= notification.debtorId.username %>">
+            ✓ Accept
+          </button>
+          <button class="reject-settlement-btn action-btn action-btn-danger" 
+                  data-settlement-id="<%= notification._id %>">
+            ✗ Reject
+          </button>
+        </div>
+      </div>
+      <% }); %>
+    </div>
+  </div>
+  <% } %>
+
+  <!-- Groups and Settlements -->
+  <div class="settlements-main">
+    <div class="section-header">
+      <h3 class="section-title">Settlements by Group</h3>
+      <p class="section-subtitle">Click on any group to view detailed settlements</p>
+    </div>
+
+    <div class="groups-grid">
+      <% groups.forEach(group => { %>
+      <div class="group-card" data-group-id="<%= group._id %>">
+        <div class="group-header">
+          <div class="group-info">
+            <h4 class="group-name"><%= group.groupName %></h4>
+            <p class="group-members"><%= group.members.length %> members</p>
+          </div>
+          <div class="group-stats">
+            <% const groupSummary = group.settlementSummary || { pending: { count: 0 }, completed: { count: 0 }, rejected: { count: 0 } }; %>
+            <span class="stat pending">
+              <span class="count"><%= groupSummary.pending.count %></span> pending
+            </span>
+            <span class="stat completed">
+              <span class="count"><%= groupSummary.completed.count %></span> done
+            </span>
+          </div>
+        </div>
+        
+        <div class="group-settlements collapsed" id="settlements-<%= group._id %>">
+          <!-- Settlements will be loaded dynamically -->
+          <div class="loading-settlements">
+            <div class="loading-spinner"></div>
+            <p>Loading settlements...</p>
+          </div>
+        </div>
+        
+        <button class="toggle-settlements-btn" data-group-id="<%= group._id %>">
+          <span class="toggle-text">View Settlements</span>
+          <span class="toggle-icon">▼</span>
+        </button>
+      </div>
+      <% }); %>
+    </div>
+  </div>
+
+  <!-- Settlement History -->
+  <div class="settlements-history">
+    <div class="section-header">
+      <h3 class="section-title">Recent Settlement Activity</h3>
+      <button class="toggle-history-btn action-btn action-btn-secondary">
+        <span class="toggle-text">Show All History</span>
+      </button>
+    </div>
+
+    <div class="history-container collapsed">
+      <div class="history-tabs">
+        <button class="history-tab active" data-status="all">All</button>
+        <button class="history-tab" data-status="completed">Completed</button>
+        <button class="history-tab" data-status="rejected">Rejected</button>
+      </div>
+
+      <div class="history-list" id="settlement-history">
+        <!-- History will be loaded dynamically -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Settlement Rejection Modal -->
+<div class="modal-overlay" id="rejectionModal" style="display:none;">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title">Reject Settlement</h3>
+      <button type="button" class="modal-close-btn" id="closeRejectionXBtn">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p id="rejectionDescription"></p>
+      <form id="rejectionForm">
+        <input type="hidden" id="rejectionSettlementId">
+        <div class="form-group">
+          <label for="rejectionReason">Reason for rejection (optional)</label>
+          <textarea id="rejectionReason" name="reason" 
+                    placeholder="e.g., Amount is incorrect, payment method doesn't work, etc."
+                    rows="3"></textarea>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="action-btn action-btn-secondary" id="cancelRejectionBtn">Cancel</button>
+      <button type="button" class="action-btn action-btn-danger" id="confirmRejectionBtn">Reject Settlement</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settlement Request Modal (New Settlement) -->
+<div class="modal-overlay" id="newSettlementModal" style="display:none;">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title">Request Settlement</h3>
+      <button type="button" class="modal-close-btn" id="closeNewSettlementXBtn">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="newSettlementForm">
+        <div class="form-group">
+          <label for="settlementGroup">Group</label>
+          <select id="settlementGroup" name="groupId" required>
+            <option value="">Select a group</option>
+            <% groups.forEach(group => { %>
+              <option value="<%= group._id %>"><%= group.groupName %></option>
+            <% }); %>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label for="settlementCreditor">Settle with</label>
+          <select id="settlementCreditor" name="creditorId" required>
+            <option value="">Select a member</option>
+            <!-- Will be populated based on group selection -->
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label for="settlementAmount">Amount (₹)</label>
+          <input type="number" id="settlementAmount" name="amount" 
+                 min="0.01" step="0.01" required placeholder="0.00">
+        </div>
+        
+        <div class="form-group">
+          <label for="settlementMethod">Payment Method</label>
+          <select id="settlementMethod" name="method">
+            <option value="cash">Cash</option>
+            <option value="upi">UPI</option>
+            <option value="bank-transfer">Bank Transfer</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label for="settlementNotes">Notes (optional)</label>
+          <textarea id="settlementNotes" name="notes" 
+                    placeholder="Additional details about the settlement..."
+                    rows="2"></textarea>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="action-btn action-btn-secondary" id="cancelNewSettlementBtn">Cancel</button>
+      <button type="button" class="action-btn action-btn-primary" id="submitNewSettlementBtn">Send Request</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/settlements.js"></script>
+
+<script>
+// Pass current user ID to the client-side JavaScript
+window.currentUserId = '<%= user.id %>';
+</script>

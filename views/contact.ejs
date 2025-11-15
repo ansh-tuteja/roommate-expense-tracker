@@ -1,0 +1,213 @@
+<div class="container">
+  <div class="dashboard-container">
+    <div class="dashboard-header">
+      <h1 class="dashboard-title">Contact Us</h1>
+      <p class="dashboard-subtitle">Get in touch with the ExpenseHub team</p>
+    </div>
+
+    <div class="dashboard-grid">
+      <div class="dashboard-main">
+        <!-- Contact Information Card -->
+        <div class="dashboard-card">
+          <div class="dashboard-card-header">
+            <h3 class="dashboard-card-title">Get in Touch</h3>
+          </div>
+          <div class="contact-content">
+            <p>We'd love to hear from you! Whether you have questions, feedback, or need support, we're here to help.</p>
+            
+            <div class="contact-methods">
+              <div class="contact-item">
+                <h4>📧 Email Support</h4>
+                <p><a href="mailto:support@expensehub.com">support@expensehub.com</a></p>
+                <small>We typically respond within 24 hours</small>
+              </div>
+
+              <div class="contact-item">
+                <h4>💬 General Inquiries</h4>
+                <p><a href="mailto:info@expensehub.com">info@expensehub.com</a></p>
+                <small>For business partnerships and general questions</small>
+              </div>
+
+              <div class="contact-item">
+                <h4>🐛 Bug Reports</h4>
+                <p><a href="mailto:bugs@expensehub.com">bugs@expensehub.com</a></p>
+                <small>Help us improve by reporting any issues you encounter</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Support Card -->
+        <div class="dashboard-card">
+          <div class="dashboard-card-header">
+            <h3 class="dashboard-card-title">Need Help?</h3>
+          </div>
+          <div class="contact-content">
+            <p>Before reaching out, you might find answers to common questions in our resources:</p>
+            <ul>
+              <li><a href="/demo-guide" target="_blank">📖 Demo Guide</a> - Learn how to use ExpenseHub</li>
+              <li><a href="/about">ℹ️ About</a> - Learn more about our platform</li>
+              <li><a href="/dashboard">🏠 Dashboard</a> - Return to your expenses</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Feedback Card -->
+        <div class="dashboard-card">
+          <div class="dashboard-card-header">
+            <h3 class="dashboard-card-title">Send Us a Message</h3>
+          </div>
+          <div class="contact-content">
+            <form id="contactForm" class="contact-form">
+              <div class="form-group">
+                <label for="contactName">Your Name</label>
+                <input type="text" id="contactName" name="name" required>
+              </div>
+              
+              <div class="form-group">
+                <label for="contactEmail">Your Email</label>
+                <input type="email" id="contactEmail" name="email" required>
+              </div>
+              
+              <div class="form-group">
+                <label for="contactSubject">Subject</label>
+                <select id="contactSubject" name="subject" required>
+                  <option value="">Select a topic...</option>
+                  <option value="support">Technical Support</option>
+                  <option value="feedback">Feedback & Suggestions</option>
+                  <option value="bug">Bug Report</option>
+                  <option value="feature">Feature Request</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              
+              <div class="form-group">
+                <label for="contactMessage">Message</label>
+                <textarea id="contactMessage" name="message" rows="5" required placeholder="Please describe your question or feedback..."></textarea>
+              </div>
+              
+              <button type="submit" class="action-btn action-btn-primary">Send Message</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Back Button -->
+        <div class="dashboard-card">
+          <div class="contact-content">
+            <a href="/dashboard" class="action-btn action-btn-secondary">← Back to Dashboard</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .contact-content {
+    padding: 20px;
+    line-height: 1.6;
+  }
+
+  .contact-methods {
+    margin: 20px 0;
+  }
+
+  .contact-item {
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #eee;
+  }
+
+  .contact-item:last-child {
+    border-bottom: none;
+  }
+
+  .contact-item h4 {
+    color: #2c3e50;
+    margin-bottom: 8px;
+  }
+
+  .contact-item p {
+    margin-bottom: 5px;
+  }
+
+  .contact-item small {
+    color: #666;
+    font-style: italic;
+  }
+
+  .contact-item a {
+    color: #3498db;
+    text-decoration: none;
+  }
+
+  .contact-item a:hover {
+    text-decoration: underline;
+  }
+
+  .contact-content ul {
+    margin: 15px 0;
+    padding-left: 20px;
+  }
+
+  .contact-content li {
+    margin-bottom: 8px;
+  }
+
+  .contact-form .form-group {
+    margin-bottom: 20px;
+  }
+
+  .contact-form label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+    color: #2c3e50;
+  }
+
+  .contact-form input,
+  .contact-form select,
+  .contact-form textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+
+  .contact-form input:focus,
+  .contact-form select:focus,
+  .contact-form textarea:focus {
+    outline: none;
+    border-color: #3498db;
+  }
+
+  .contact-form textarea {
+    resize: vertical;
+    font-family: inherit;
+  }
+</style>
+
+<script>
+  document.getElementById('contactForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    // Simple form validation
+    const name = document.getElementById('contactName').value;
+    const email = document.getElementById('contactEmail').value;
+    const subject = document.getElementById('contactSubject').value;
+    const message = document.getElementById('contactMessage').value;
+    
+    if (!name || !email || !subject || !message) {
+      alert('Please fill in all fields');
+      return;
+    }
+    
+    // For now, just show a success message
+    // In a real app, you'd send this to a server endpoint
+    alert('Thank you for your message! We\'ll get back to you soon.');
+    
+    // Clear the form
+    this.reset();
+  });
+</script>
