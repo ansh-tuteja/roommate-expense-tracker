@@ -1,0 +1,733 @@
+<div class="dashboard-container">
+  <!-- Hidden data for JavaScript -->
+  <div id="dashboard-data" data-user-id="<%= user._id %>" style="display: none;"></div>
+  
+  <div class="dashboard-header">
+    <h1 class="dashboard-title">Welcome, <%= user.username %></h1>
+    <p class="dashboard-subtitle">Track your expenses, manage groups, and settle balances all in one place
+      <a href="/demo-guide" target="_blank" class="demo-link">Demo Guide</a>
+    </p>
+  </div>
+
+  <!-- Overview Summary Cards -->
+  <div class="summary-cards">
+    <div class="summary-card">
+      <div class="summary-card-title">Your Personal Spending</div>
+      <div class="summary-card-value personal-spending">₹<%= personalMonthlyTotal.toFixed(2) %></div>
+      <div class="summary-card-subtitle">This month</div>
+    </div>
+    
+    <div class="summary-card">
+      <div class="summary-card-title">Your Group Spending</div>
+      <div class="summary-card-value group-spending">₹<%= groupMonthlyTotal.toFixed(2) %></div>
+      <div class="summary-card-subtitle">This month (your share)</div>
+    </div>
+    
+    <% if (totalOwed > 0) { %>
+    <div class="summary-card alert">
+      <div class="summary-card-title">You Owe</div>
+  <div class="summary-card-value">₹<%= totalOwed.toFixed(2) %></div>
+      <div class="summary-card-subtitle">Across all groups</div>
+    </div>
+    <% } %>
+    
+    <% if (totalOwedToUser > 0) { %>
+    <div class="summary-card success">
+      <div class="summary-card-title">You Are Owed</div>
+  <div class="summary-card-value">₹<%= totalOwedToUser.toFixed(2) %></div>
+      <div class="summary-card-subtitle">Across all groups</div>
+    </div>
+    <% } %>
+    
+    <div class="summary-card">
+      <div class="summary-card-title">Your ID</div>
+      <div class="summary-card-value" style="font-size: 1rem;"><code><%= userId %></code></div>
+      <div class="summary-card-subtitle">
+        <button id="copyId" class="action-btn action-btn-secondary">
+          <span class="action-btn-icon">📋</span> Copy
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="dashboard-grid">
+    <div class="dashboard-main">
+      <!-- Settlement Notifications Section -->
+      <% if (settlementNotifications && settlementNotifications.length > 0) { %>
+      <div class="dashboard-card settlement-notifications-card">
+        <div class="dashboard-card-header">
+          <h3 class="dashboard-card-title">
+            <span class="notification-icon">🔔</span>
+            Settlement Requests
+            <span class="notification-badge"><%= settlementNotifications.length %></span>
+          </h3>
+          <a href="/settlements" class="action-btn action-btn-primary">View All</a>
+        </div>
+        <div class="settlement-notifications-list">
+          <% settlementNotifications.forEach(notification => { %>
+          <div class="settlement-notification-item">
+            <div class="notification-content">
+              <strong><%= notification.debtorId.username %></strong> wants to settle 
+              <span class="amount">₹<%= notification.amount.toFixed(2) %></span>
+              <div class="notification-meta">
+                <span class="group-name"><%= notification.groupId ? notification.groupId.groupName : 'Cross-group settlement' %></span>
+                <span class="time"><%= notification.timeAgo %></span>
+              </div>
+            </div>
+            <div class="notification-actions">
+              <button class="action-btn action-btn-success accept-settlement-btn" 
+                      data-settlement-id="<%= notification._id %>"
+                      data-amount="<%= notification.amount %>"
+                      data-debtor="<%= notification.debtorId.username %>">
+                ✓ Accept
+              </button>
+              <button class="action-btn action-btn-danger reject-settlement-btn" 
+                      data-settlement-id="<%= notification._id %>">
+                ✗ Reject
+              </button>
+            </div>
+          </div>
+          <% }); %>
+        </div>
+      </div>
+      <% } %>
+
+      <!-- General Notifications Section (Rejections, etc.) -->
+      <% if (generalNotifications && generalNotifications.length > 0) { %>
+      <div class="dashboard-card general-notifications-card">
+        <div class="dashboard-card-header">
+          <h3 class="dashboard-card-title">
+            <span class="notification-icon">📢</span>
+            Notifications
+            <span class="notification-badge"><%= generalNotifications.length %></span>
+          </h3>
+        </div>
+        <div class="general-notifications-list">
+          <% generalNotifications.forEach(notification => { %>
+          <div class="general-notification-item">
+            <div class="notification-content">
+              <div class="notification-title"><%= notification.title %></div>
+              <div class="notification-message"><%= notification.message %></div>
+              <% if (notification.data.rejectionReason) { %>
+                <div class="rejection-reason">Reason: <%= notification.data.rejectionReason %></div>
+              <% } %>
+              <div class="notification-meta">
+                <span class="group-name">
+                  <%= notification.data.groupId ? notification.data.groupId.groupName : 'Cross-group settlement' %>
+                </span>
+                <span class="time"><%= notification.timeAgo %></span>
+              </div>
+            </div>
+            <div class="notification-actions">
+              <% if (notification.type === 'settlement_rejected') { %>
+                <button class="action-btn action-btn-primary settle-again-btn" 
+                        data-notification-id="<%= notification._id %>"
+                        data-amount="<%= notification.data.amount %>"
+                        data-group-id="<%= notification.data.groupId %>">
+                  🔄 Settle Again
+                </button>
+              <% } %>
+              <button class="action-btn action-btn-secondary close-notification-btn" 
+                      data-notification-id="<%= notification._id %>">
+                ✕ Close
+              </button>
+            </div>
+          </div>
+          <% }); %>
+        </div>
+      </div>
+      <% } %>
+
+      <!-- Add Expense Section -->
+      <div class="dashboard-card">
+        <div class="dashboard-card-header">
+          <h3 class="dashboard-card-title">Add New Expense</h3>
+          <button id="addExpenseBtn" class="action-btn action-btn-primary">
+            <span class="action-btn-icon">+</span> Add Expense
+          </button>
+        </div>
+      </div>
+
+      <!-- Expense Tabs and Listings -->
+      <div class="dashboard-card">
+        <div class="dashboard-tabs">
+          <div class="dashboard-tab active" data-tab="all">All Expenses</div>
+          <div class="dashboard-tab" data-tab="personal">Personal</div>
+          <div class="dashboard-tab" data-tab="group">Group</div>
+        </div>
+        
+        <div class="tab-content" id="all-tab">
+          <table class="expense-table">
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th>Category</th>
+                <th>Amount</th>
+                <th>Date</th>
+                <th>Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% const allExpenses = [...personalExpenses, ...groupExpenses].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); %>
+              <% for(const exp of allExpenses.slice(0, 10)) { %>
+                <tr>
+                  <td><%= exp.description %></td>
+                  <td><%= exp.category || 'Other' %></td>
+                  <td class="<%= exp.isPersonal ? '' : (exp.paidBy._id.toString() === userId ? 'text-success' : 'text-danger') %>">
+                    ₹<%= exp.amount.toFixed(2) %>
+                  </td>
+                  <td><%= new Date(exp.createdAt).toLocaleDateString() %></td>
+                  <td>
+                    <% if(exp.isPersonal) { %>
+                      <span class="badge badge-secondary">Personal</span>
+                    <% } else { %>
+                      <span class="badge badge-primary">Group</span>
+                    <% } %>
+                  </td>
+                </tr>
+              <% } %>
+              <% if(allExpenses.length === 0) { %>
+                <tr>
+                  <td colspan="5" class="text-center">No expenses yet</td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+        
+        <div class="tab-content" id="personal-tab" style="display: none;">
+          <table class="expense-table">
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th>Category</th>
+                <th>Amount</th>
+                <th>Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% for(const exp of personalExpenses.slice(0, 10)) { %>
+                <tr data-expense-id="<%= exp._id %>">
+                  <td><%= exp.description %></td>
+                  <td><%= exp.category || 'Other' %></td>
+                  <td>₹<%= exp.amount.toFixed(2) %></td>
+                  <td><%= new Date(exp.createdAt).toLocaleDateString() %></td>
+                  <td class="action-cell">
+                    <div class="expense-actions">
+                      <button class="edit-expense-btn action-icon" title="Edit" data-id="<%= exp._id %>">✏️</button>
+                      <button class="delete-expense-btn action-icon" title="Delete" data-id="<%= exp._id %>">🗑️</button>
+                    </div>
+                  </td>
+                </tr>
+              <% } %>
+              <% if(personalExpenses.length === 0) { %>
+                <tr>
+                  <td colspan="4" class="text-center">No personal expenses yet</td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+        
+        <div class="tab-content" id="group-tab" style="display: none;">
+          <table class="expense-table">
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th>Group</th>
+                <th>Paid by</th>
+                <th>Amount</th>
+                <th>Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% for(const exp of groupExpenses.slice(0, 10)) { %>
+                <tr data-expense-id="<%= exp._id %>">
+                  <td><%= exp.description %></td>
+                  <td><%= exp.groupId ? exp.groupId.groupName : 'Unknown' %></td>
+                  <td><%= exp.paidBy.username || (exp.paidBy._id && userIdMap[exp.paidBy._id.toString()] ? userIdMap[exp.paidBy._id.toString()].username : `User (${exp.paidBy._id.toString().slice(-5)})`) %></td>
+                  <td class="<%= exp.paidBy._id && exp.paidBy._id.toString() === userId ? 'text-success' : 'text-danger' %>">
+                    ₹<%= exp.amount.toFixed(2) %>
+                  </td>
+                  <td><%= new Date(exp.createdAt).toLocaleDateString() %></td>
+                  <td class="action-cell">
+                    <div class="expense-actions">
+                      <% if (exp.paidBy._id && exp.paidBy._id.toString() === userId) { %>
+                        <button class="edit-expense-btn action-icon" title="Edit" data-id="<%= exp._id %>">✏️</button>
+                        <button class="delete-expense-btn action-icon" title="Delete" data-id="<%= exp._id %>">🗑️</button>
+                      <% } %>
+                      <% if (exp.isSettlement && exp.status === 'pending' && exp.splitAmong.includes(userId)) { %>
+                        <button class="verify-settlement-btn action-icon" title="Verify Settlement" data-id="<%= exp._id %>">✓</button>
+                      <% } %>
+                    </div>
+                  </td>
+                </tr>
+              <% } %>
+              <% if(groupExpenses.length === 0) { %>
+                <tr>
+                  <td colspan="5" class="text-center">No group expenses yet</td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Group Detail Section -->
+      <div class="dashboard-card">
+        <div class="dashboard-card-header">
+          <h3 class="dashboard-card-title">Your Groups</h3>
+          <div>
+            <button id="createGroupBtn" class="action-btn action-btn-secondary">Create Group</button>
+            <button id="joinGroupBtn" class="action-btn action-btn-secondary">Join Group</button>
+          </div>
+        </div>
+        
+        <div class="group-list">
+          <% if(groups.length === 0) { %>
+            <p class="text-center">You haven't joined any groups yet</p>
+          <% } %>
+          
+          <% for(const group of groups) { %>
+            <div class="group-card" data-members="<%= group.members.map(m => {
+                  const memberInfo = userIdMap[m.toString()];
+                  return memberInfo ? `${memberInfo.id}:${memberInfo.username}` : '';
+                }).filter(Boolean).join('|') %>">
+              <div class="group-card-header">
+                <div class="group-name"><%= group.groupName %></div>
+                <button class="action-btn action-btn-secondary group-details-btn" data-id="<%= group._id %>">View Details</button>
+              </div>
+              <div class="group-details">
+                <div class="group-members"><%= group.members.length %> members</div>
+                <div class="group-id">
+                  <span>ID: <code><%= group._id %></code></span>
+                  <button class="copy-group-id" data-group-id="<%= group._id %>">
+                    <span class="action-btn-icon">📋</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          <% } %>
+        </div>
+      </div>
+    </div>
+    
+    <div class="dashboard-sidebar">
+      <!-- Balances Section -->
+      <div class="dashboard-card">
+        <div class="dashboard-card-header">
+          <h3 class="dashboard-card-title">Balances</h3>
+        </div>
+        
+        <% const entries = Object.entries(netBalances); %>
+        <% if(entries.length === 0) { %>
+          <p>You're all settled up!</p>
+        <% } else { %>
+          <ul style="list-style: none; padding: 0;">
+            <% for (const [key, balanceInfo] of entries) { 
+              const [debtor, creditor] = key.split(':');
+              const isDebtor = debtor === userId;
+              const isCreditor = creditor === userId;
+              
+              // Check if we have the user info objects
+              const hasDebtorInfo = balanceInfo.debtorInfo && typeof balanceInfo.debtorInfo === 'object';
+              const hasCreditorInfo = balanceInfo.creditorInfo && typeof balanceInfo.creditorInfo === 'object';
+              
+              // Enhanced name handling with fallbacks
+              let debtorName;
+              if (isDebtor) {
+                debtorName = 'You';
+              } else if (hasDebtorInfo && balanceInfo.debtorInfo.username) {
+                debtorName = balanceInfo.debtorInfo.username;
+              } else {
+                debtorName = `User (${debtor.slice(-5)})`;
+              }
+              
+              let creditorName;
+              if (isCreditor) {
+                creditorName = 'You';
+              } else if (hasCreditorInfo && balanceInfo.creditorInfo.username) {
+                creditorName = balanceInfo.creditorInfo.username;
+              } else {
+                creditorName = `User (${creditor.slice(-5)})`;
+              }
+            %>
+              <li class="<%= isDebtor ? 'debtor-item' : 'creditor-item' %>" style="margin-bottom: 0.5rem; padding: 0.5rem; border-radius: var(--radius-sm)">
+                <% if (isDebtor) { %>
+                  <span>You owe <strong><%= creditorName %></strong></span>
+                <% } else if (isCreditor) { %>
+                  <span><strong><%= debtorName %></strong> owes you</span>
+                <% } else { %>
+                  <span><%= debtorName %> owes <%= creditorName %></span>
+                <% } %>
+                <strong style="float: right;">₹<%= balanceInfo.amount.toFixed(2) %></strong>
+                <div class="expense-actions">
+                  <button class="settle-balance-btn action-btn action-btn-secondary" 
+                          data-debtor="<%= debtor %>" 
+                          data-creditor="<%= creditor %>" 
+                          data-amount="<%= balanceInfo.amount %>"
+                          data-debtor-name="<%= debtorName %>"
+                          data-creditor-name="<%= creditorName %>">
+                    Settle
+                  </button>
+                </div>
+              </li>
+            <% } %>
+          </ul>
+        <% } %>
+
+<!-- Group Details Modal -->
+<div class="modal-overlay" id="groupDetailsModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title" id="groupDetailsTitle">Group Details</h3>
+    </div>
+    <div class="modal-body" id="groupDetailsBody">
+      <!-- Content will be filled by JS -->
+    </div>
+    <div class="modal-footer">
+      <button class="action-btn action-btn-secondary" id="closeGroupDetailsBtn">Close</button>
+    </div>
+  </div>
+</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Expense Modal -->
+<div class="modal-overlay" id="addExpenseModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title">Add New Expense</h3>
+    </div>
+    <div class="modal-body">
+      <form action="/expenses" method="post" id="expenseForm">
+        <div class="expense-type-toggle">
+          <div class="expense-type-option active" data-type="personal">Personal Expense</div>
+          <div class="expense-type-option" data-type="group">Group Expense</div>
+        </div>
+        <input type="hidden" name="expenseType" id="expenseType" value="personal">
+        
+        <div class="form-group">
+          <label for="description">Description</label>
+          <input type="text" id="description" name="description" placeholder="What was it for?" required>
+        </div>
+        
+        <div class="form-group">
+          <label for="amount">Amount</label>
+          <input type="number" id="amount" name="amount" step="0.01" min="0" placeholder="0.00" required>
+        </div>
+        
+        <div class="form-group">
+          <label for="category">Category</label>
+          <select id="category" name="category" required>
+            <option value="Food">Food</option>
+            <option value="Transportation">Transportation</option>
+            <option value="Shopping">Shopping</option>
+            <option value="Entertainment">Entertainment</option>
+            <option value="Utilities">Utilities</option>
+            <option value="Health">Health</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        
+        <div class="group-expense-fields" style="display: none;">
+          <div class="form-group">
+            <label for="groupId">Group</label>
+            <select id="groupId" name="groupId">
+              <option value="" disabled selected>Select a group</option>
+              <% for (const g of groups) { %>
+              <option value="<%= g._id %>" 
+                data-members="<%= g.members.map(m => `${m._id}:${m.username}`).join('|') %>"><%= g.groupName %></option>
+              <% } %>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label for="splitAmong">Split Among</label>
+            <select id="splitAmong" name="splitAmongMembers" multiple class="member-select">
+              <option value="" disabled>Select members to split with</option>
+              <!-- Will be populated dynamically based on selected group -->
+            </select>
+            <input type="hidden" name="splitAmong" id="splitAmongHidden">
+            <div class="form-hint">All group members are included by default. Hold Ctrl/Cmd key to select multiple members. Click again to deselect.</div>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="action-btn action-btn-secondary" id="cancelExpenseBtn">Cancel</button>
+      <button class="action-btn action-btn-primary" id="submitExpenseBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create Group Modal -->
+<div class="modal-overlay" id="createGroupModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title">Create New Group</h3>
+    </div>
+    <div class="modal-body">
+      <form action="/groups" method="post" id="createGroupForm">
+        <div class="form-group">
+          <label for="groupName">Group Name</label>
+          <input type="text" id="groupName" name="groupName" placeholder="Enter a name for your group" required>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="action-btn action-btn-secondary" id="cancelCreateGroupBtn">Cancel</button>
+      <button class="action-btn action-btn-primary" id="submitCreateGroupBtn">Create Group</button>
+    </div>
+  </div>
+</div>
+
+<!-- Join Group Modal -->
+<div class="modal-overlay" id="joinGroupModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title">Join Group</h3>
+    </div>
+    <div class="modal-body">
+      <form action="/groups/join" method="post" id="joinGroupForm">
+        <p class="modal-info">Ask a group member for their Group ID. They can copy it from their dashboard.</p>
+        <div class="form-group">
+          <label for="joinGroupId">Group ID</label>
+          <input type="text" id="joinGroupId" name="groupId" placeholder="Paste the group ID here" required>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="action-btn action-btn-secondary" id="cancelJoinGroupBtn">Cancel</button>
+      <button class="action-btn action-btn-primary" id="submitJoinGroupBtn">Join Group</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Copy User ID functionality
+  const copyBtn = document.getElementById('copyId');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText('<%= userId %>');
+        copyBtn.innerHTML = '<span class="action-btn-icon">✓</span> Copied!';
+        setTimeout(() => (copyBtn.innerHTML = '<span class="action-btn-icon">📋</span> Copy'), 2000);
+      } catch (err) {
+        console.error('Failed to copy:', err);
+      }
+    });
+  }
+  
+  // Copy Group ID functionality
+  document.querySelectorAll('.copy-group-id').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      try {
+        const groupId = btn.getAttribute('data-group-id');
+        await navigator.clipboard.writeText(groupId);
+        const originalHTML = btn.innerHTML;
+        btn.innerHTML = '<span class="action-btn-icon">✓</span>';
+        setTimeout(() => (btn.innerHTML = originalHTML), 2000);
+        
+        // Show a toast notification
+        const toast = document.createElement('div');
+        toast.className = 'toast-notification';
+        toast.textContent = 'Group ID copied! Share this with friends to let them join.';
+        document.body.appendChild(toast);
+        
+        // Remove the toast after 3 seconds
+        setTimeout(() => {
+          toast.classList.add('toast-hide');
+          setTimeout(() => {
+            document.body.removeChild(toast);
+          }, 300);
+        }, 3000);
+      } catch (err) {
+        console.error('Failed to copy:', err);
+      }
+    });
+  });
+
+  // View Group Details functionality
+  document.querySelectorAll('.group-details-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const groupId = btn.getAttribute('data-id');
+      // Find group info from DOM
+      const groupCard = btn.closest('.group-card');
+      const groupName = groupCard.querySelector('.group-name').textContent;
+      const groupIdText = groupCard.querySelector('.group-id code').textContent;
+      
+      // Get member data from the data attribute
+      const membersData = groupCard.getAttribute('data-members');
+      let memberListHTML = '<ul class="member-list">';
+      
+      if (membersData) {
+        const members = membersData.split('|').map(item => {
+          const [id, name] = item.split(':');
+          return { id, name };
+        });
+        
+        // Sort members alphabetically
+        members.sort((a, b) => a.name.localeCompare(b.name));
+        
+        members.forEach(member => {
+          memberListHTML += `<li>${member.name}</li>`;
+        });
+      } else {
+        memberListHTML += '<li>No member information available</li>';
+      }
+      memberListHTML += '</ul>';
+      
+      document.getElementById('groupDetailsTitle').textContent = groupName + ' Details';
+      document.getElementById('groupDetailsBody').innerHTML =
+        `<p><strong>Group Name:</strong> ${groupName}</p>` +
+        `<p><strong>Group ID:</strong> <code>${groupIdText}</code></p>` +
+        `<p><strong>Members:</strong></p>${memberListHTML}`;
+      document.getElementById('groupDetailsModal').style.display = 'flex';
+      document.getElementById('groupDetailsModal').classList.add('active');
+    });
+  });
+  document.getElementById('closeGroupDetailsBtn').addEventListener('click', function() {
+    document.getElementById('groupDetailsModal').classList.remove('active');
+    document.getElementById('groupDetailsModal').style.display = 'none';
+  });
+  
+  // Tab functionality
+  document.querySelectorAll('.dashboard-tab').forEach(tab => {
+    tab.addEventListener('click', function() {
+      // Remove active class from all tabs
+      document.querySelectorAll('.dashboard-tab').forEach(t => t.classList.remove('active'));
+      // Add active class to clicked tab
+      this.classList.add('active');
+      
+      // Hide all tab contents
+      document.querySelectorAll('.tab-content').forEach(content => {
+        content.style.display = 'none';
+      });
+      
+      // Show the selected tab content
+      const tabId = this.getAttribute('data-tab');
+      document.getElementById(`${tabId}-tab`).style.display = 'block';
+    });
+  });
+  
+  // Modal functionality
+  function setupModal(openBtnId, modalId, closeBtnId, submitBtnId, formId) {
+    const openBtn = document.getElementById(openBtnId);
+    const modal = document.getElementById(modalId);
+    const closeBtn = document.getElementById(closeBtnId);
+    const submitBtn = document.getElementById(submitBtnId);
+    const form = document.getElementById(formId);
+    
+    if (openBtn) {
+      openBtn.addEventListener('click', () => {
+        modal.classList.add('active');
+      });
+    }
+    
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        modal.classList.remove('active');
+      });
+    }
+    
+    if (submitBtn && form) {
+      submitBtn.addEventListener('click', () => {
+        form.submit();
+      });
+    }
+  }
+  
+  // Setup all modals
+  setupModal('addExpenseBtn', 'addExpenseModal', 'cancelExpenseBtn', 'submitExpenseBtn', 'expenseForm');
+  setupModal('createGroupBtn', 'createGroupModal', 'cancelCreateGroupBtn', 'submitCreateGroupBtn', 'createGroupForm');
+  setupModal('joinGroupBtn', 'joinGroupModal', 'cancelJoinGroupBtn', 'submitJoinGroupBtn', 'joinGroupForm');
+  
+  // Expense type toggle
+  document.querySelectorAll('.expense-type-option').forEach(option => {
+    option.addEventListener('click', function() {
+      document.querySelectorAll('.expense-type-option').forEach(opt => {
+        opt.classList.remove('active');
+      });
+      
+      this.classList.add('active');
+      const type = this.getAttribute('data-type');
+      document.getElementById('expenseType').value = type;
+      
+      const groupFields = document.querySelector('.group-expense-fields');
+      if (type === 'group') {
+        groupFields.style.display = 'block';
+        document.getElementById('groupId').setAttribute('required', true);
+      } else {
+        groupFields.style.display = 'none';
+        document.getElementById('groupId').removeAttribute('required');
+      }
+    });
+  });
+
+  // Group member selection handling
+  const groupSelect = document.getElementById('groupId');
+  const memberSelect = document.getElementById('splitAmong');
+  const hiddenInput = document.getElementById('splitAmongHidden');
+  
+  // We'll use a data structure to store members for each group
+  const groupMembers = {};
+  
+  // Update member select when group changes
+  if (groupSelect) {
+    groupSelect.addEventListener('change', function() {
+      const selectedOption = this.options[this.selectedIndex];
+      memberSelect.innerHTML = '';
+      
+      if (!selectedOption.value) return;
+      
+      const membersData = selectedOption.getAttribute('data-members');
+      if (membersData) {
+        const members = membersData.split('|').map(item => {
+          const [id, name] = item.split(':');
+          return { id, name };
+        });
+        
+        // Sort members alphabetically by name for easier selection
+        members.sort((a, b) => a.name.localeCompare(b.name));
+        
+        members.forEach(member => {
+          const option = document.createElement('option');
+          option.value = member.id;
+          option.textContent = member.name;
+          option.selected = true;
+          memberSelect.appendChild(option);
+        });
+      }
+      
+      updateHiddenSplitInput();
+    });
+  }
+  
+  // Update hidden input when member selection changes
+  if (memberSelect) {
+    memberSelect.addEventListener('change', updateHiddenSplitInput);
+    
+    // Add CSS to improve multi-select appearance
+    memberSelect.style.minHeight = "100px";
+  }
+  
+  function updateHiddenSplitInput() {
+    const selectedOptions = Array.from(memberSelect.selectedOptions);
+    const selectedIds = selectedOptions.map(opt => opt.value);
+    hiddenInput.value = selectedIds.join(',');
+  }
+  
+  // Initialize with blank hidden input
+  if (hiddenInput) {
+    hiddenInput.value = '';
+  }
+</script>
+
+<%- include('settlement-modal') %>
+
+<script src="/js/dashboard.js"></script>

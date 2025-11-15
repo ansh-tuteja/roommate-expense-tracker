@@ -1,0 +1,498 @@
+<div class="container">
+  <div class="dashboard-container">
+    <div class="dashboard-header">
+      <h1 class="dashboard-title">User Profile</h1>
+      <p class="dashboard-subtitle">Manage your account information</p>
+    </div>
+
+    <div class="dashboard-grid">
+      <div class="dashboard-main">
+        <!-- Profile Information Card -->
+        <div class="dashboard-card">
+          <div class="dashboard-card-header">
+            <h3 class="dashboard-card-title">Profile Information</h3>
+            <button id="editProfileBtn" class="action-btn action-btn-secondary">Edit Profile</button>
+          </div>
+          <div class="profile-info">
+            <div class="profile-item">
+              <div class="profile-label">Username</div>
+              <div class="profile-value" id="username-display"><%= user.username %></div>
+            </div>
+            <div class="profile-item">
+              <div class="profile-label">Email</div>
+              <div class="profile-value" id="email-display"><%= user.email %></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Security Settings Card -->
+        <div class="dashboard-card">
+          <div class="dashboard-card-header">
+            <h3 class="dashboard-card-title">Security</h3>
+            <button id="changePasswordBtn" class="action-btn action-btn-secondary">Change Password</button>
+          </div>
+          <div class="security-info">
+            <div class="profile-item">
+              <div class="profile-label">Password</div>
+              <div class="profile-value">•••••••••</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Categories Card -->
+        <div class="dashboard-card">
+          <div class="dashboard-card-header">
+            <h3 class="dashboard-card-title">Custom Categories</h3>
+            <button id="addCategoryBtn" class="action-btn action-btn-secondary">Add Category</button>
+          </div>
+          <div class="categories-list">
+            <% if(user.customCategories && user.customCategories.length) { %>
+              <ul class="category-list">
+                <% user.customCategories.forEach(category => { %>
+                  <li class="category-item">
+                    <span><%= category %></span>
+                    <button class="delete-category-btn" data-category="<%= category %>">Delete</button>
+                  </li>
+                <% }); %>
+              </ul>
+            <% } else { %>
+              <p>You haven't added any custom categories yet.</p>
+            <% } %>
+          </div>
+        </div>
+
+        <!-- Danger Zone Card -->
+        <div class="dashboard-card danger-zone">
+          <div class="dashboard-card-header">
+            <h3 class="dashboard-card-title">Danger Zone</h3>
+          </div>
+          <div class="danger-actions">
+            <button id="deleteAccountBtn" class="action-btn action-btn-danger">Delete Account</button>
+            <p class="danger-text">This action cannot be undone. All your data will be permanently deleted.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Profile Modal -->
+<div class="modal-overlay" id="editProfileModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title">Edit Profile</h3>
+    </div>
+    <div class="modal-body">
+      <form id="editProfileForm">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username" value="<%= user.username %>" required>
+        </div>
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" value="<%= user.email %>" required>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="action-btn action-btn-secondary" id="cancelEditProfileBtn">Cancel</button>
+      <button class="action-btn action-btn-primary" id="saveProfileBtn">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Change Password Modal -->
+<div class="modal-overlay" id="changePasswordModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title">Change Password</h3>
+    </div>
+    <div class="modal-body">
+      <form id="changePasswordForm">
+        <div class="form-group">
+          <label for="currentPassword">Current Password</label>
+          <input type="password" id="currentPassword" name="currentPassword" required>
+        </div>
+        <div class="form-group">
+          <label for="newPassword">New Password</label>
+          <input type="password" id="newPassword" name="newPassword" required>
+        </div>
+        <div class="form-group">
+          <label for="confirmPassword">Confirm New Password</label>
+          <input type="password" id="confirmPassword" name="confirmPassword" required>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="action-btn action-btn-secondary" id="cancelChangePasswordBtn">Cancel</button>
+      <button class="action-btn action-btn-primary" id="savePasswordBtn">Change Password</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Category Modal -->
+<div class="modal-overlay" id="addCategoryModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title">Add Custom Category</h3>
+    </div>
+    <div class="modal-body">
+      <form id="addCategoryForm">
+        <div class="form-group">
+          <label for="categoryName">Category Name</label>
+          <input type="text" id="categoryName" name="categoryName" required>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="action-btn action-btn-secondary" id="cancelAddCategoryBtn">Cancel</button>
+      <button class="action-btn action-btn-primary" id="saveCategoryBtn">Add Category</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Account Confirmation Modal -->
+<div class="modal-overlay" id="deleteAccountModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title">Delete Account</h3>
+    </div>
+    <div class="modal-body">
+      <p class="danger-text">Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently deleted.</p>
+      <form id="deleteAccountForm">
+        <div class="form-group">
+          <label for="deleteConfirmation">Type "DELETE" to confirm</label>
+          <input type="text" id="deleteConfirmation" name="deleteConfirmation" required>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="action-btn action-btn-secondary" id="cancelDeleteAccountBtn">Cancel</button>
+      <button class="action-btn action-btn-danger" id="confirmDeleteAccountBtn">Delete Account</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Modal handling functions
+  function openModal(modalId) {
+    console.log('Opening modal:', modalId);
+    const modal = document.getElementById(modalId);
+    console.log('Modal element found:', modal);
+    if (modal) {
+      modal.style.display = 'flex';
+      modal.classList.add('active');
+      console.log('Modal opened successfully');
+    } else {
+      console.error('Modal element not found:', modalId);
+    }
+  }
+  
+  function closeModal(modalId) {
+    document.getElementById(modalId).classList.remove('active');
+    setTimeout(() => {
+      document.getElementById(modalId).style.display = 'none';
+    }, 200);
+  }
+  
+  // Profile Edit
+  document.getElementById('editProfileBtn').addEventListener('click', () => {
+    openModal('editProfileModal');
+  });
+  
+  document.getElementById('cancelEditProfileBtn').addEventListener('click', () => {
+    closeModal('editProfileModal');
+  });
+  
+  document.getElementById('saveProfileBtn').addEventListener('click', async () => {
+    const username = document.getElementById('username').value;
+    const email = document.getElementById('email').value;
+    
+    try {
+      const response = await fetch('/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, email }),
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        document.getElementById('username-display').textContent = username;
+        document.getElementById('email-display').textContent = email;
+        closeModal('editProfileModal');
+        showToast('Profile updated successfully');
+      } else {
+        showToast('Error: ' + result.error);
+      }
+    } catch (error) {
+      showToast('Error updating profile');
+    }
+  });
+  
+  // Change Password
+  document.getElementById('changePasswordBtn').addEventListener('click', () => {
+    console.log('Change Password button clicked');
+    console.log('Modal element:', document.getElementById('changePasswordModal'));
+    clearModalError('changePasswordModal'); // Clear any previous errors
+    openModal('changePasswordModal');
+  });
+  
+  document.getElementById('cancelChangePasswordBtn').addEventListener('click', () => {
+    closeModal('changePasswordModal');
+    document.getElementById('changePasswordForm').reset();
+    clearModalError('changePasswordModal'); // Clear errors when canceling
+  });
+  
+  document.getElementById('savePasswordBtn').addEventListener('click', async () => {
+    const currentPassword = document.getElementById('currentPassword').value;
+    const newPassword = document.getElementById('newPassword').value;
+    const confirmPassword = document.getElementById('confirmPassword').value;
+    
+    // Clear any existing error messages
+    clearModalError('changePasswordModal');
+    
+    // Client-side validation
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      showModalError('changePasswordModal', 'All fields are required');
+      return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+      showModalError('changePasswordModal', 'New passwords do not match');
+      return;
+    }
+    
+    // Validate new password requirements
+    if (newPassword.length < 8) {
+      showModalError('changePasswordModal', 'New password must be at least 8 characters long');
+      return;
+    }
+    
+    if (newPassword.length > 128) {
+      showModalError('changePasswordModal', 'New password must be no more than 128 characters long');
+      return;
+    }
+    
+    if (!/(?=.*[A-Za-z])/.test(newPassword)) {
+      showModalError('changePasswordModal', 'New password must contain at least one letter');
+      return;
+    }
+    
+    if (!/(?=.*\d)/.test(newPassword)) {
+      showModalError('changePasswordModal', 'New password must contain at least one number');
+      return;
+    }
+    
+    try {
+      const response = await fetch('/profile/password', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        // Show success message in modal
+        showModalSuccess('changePasswordModal', 'Password changed successfully!');
+        document.getElementById('changePasswordForm').reset();
+        
+        // Close modal after showing success message for 1.5 seconds
+        setTimeout(() => {
+          closeModal('changePasswordModal');
+          showToast('Password changed successfully');
+        }, 1500);
+      } else {
+        // Show server error in modal
+        showModalError('changePasswordModal', result.error);
+      }
+    } catch (error) {
+      showModalError('changePasswordModal', 'Error changing password. Please try again.');
+    }
+  });
+  
+  // Add Category
+  document.getElementById('addCategoryBtn').addEventListener('click', () => {
+    openModal('addCategoryModal');
+  });
+  
+  document.getElementById('cancelAddCategoryBtn').addEventListener('click', () => {
+    closeModal('addCategoryModal');
+    document.getElementById('addCategoryForm').reset();
+  });
+  
+  document.getElementById('saveCategoryBtn').addEventListener('click', async () => {
+    const categoryName = document.getElementById('categoryName').value;
+    
+    try {
+      const response = await fetch('/api/categories', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ categoryName }),
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        // Refresh the page to show the new category
+        location.reload();
+      } else {
+        showToast('Error: ' + result.error);
+      }
+    } catch (error) {
+      showToast('Error adding category');
+    }
+  });
+  
+  // Delete Category
+  document.querySelectorAll('.delete-category-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const category = e.target.getAttribute('data-category');
+      
+      if (confirm(`Are you sure you want to delete the category "${category}"?`)) {
+        try {
+          const response = await fetch(`/api/categories/${encodeURIComponent(category)}`, {
+            method: 'DELETE',
+          });
+          
+          const result = await response.json();
+          
+          if (result.success) {
+            // Refresh the page to update the category list
+            location.reload();
+          } else {
+            showToast('Error: ' + result.error);
+          }
+        } catch (error) {
+          showToast('Error deleting category');
+        }
+      }
+    });
+  });
+  
+  // Delete Account
+  document.getElementById('deleteAccountBtn').addEventListener('click', () => {
+    openModal('deleteAccountModal');
+  });
+  
+  document.getElementById('cancelDeleteAccountBtn').addEventListener('click', () => {
+    closeModal('deleteAccountModal');
+    document.getElementById('deleteAccountForm').reset();
+  });
+  
+  document.getElementById('confirmDeleteAccountBtn').addEventListener('click', async () => {
+    const confirmation = document.getElementById('deleteConfirmation').value;
+    
+    if (confirmation !== 'DELETE') {
+      showToast('Please type "DELETE" to confirm account deletion');
+      return;
+    }
+    
+    try {
+      const response = await fetch('/profile', {
+        method: 'DELETE',
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        showToast('Account deleted successfully');
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 1500);
+      } else {
+        showToast('Error: ' + result.error);
+      }
+    } catch (error) {
+      showToast('Error deleting account');
+    }
+  });
+  
+  // Toast notification
+  function showToast(message) {
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+      toast.classList.add('show');
+      
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => {
+          document.body.removeChild(toast);
+        }, 300);
+      }, 3000);
+    }, 100);
+  }
+
+  // Show error message in modal
+  function showModalError(modalId, message) {
+    // Remove any existing error message
+    const existingError = document.querySelector(`#${modalId} .error-message`);
+    if (existingError) {
+      existingError.remove();
+    }
+    
+    // Create new error message
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'error-message';
+    errorDiv.style.cssText = `
+      background-color: #fee;
+      color: #c33;
+      padding: 10px;
+      border: 1px solid #fcc;
+      border-radius: 4px;
+      margin-bottom: 15px;
+      font-size: 14px;
+    `;
+    errorDiv.textContent = message;
+    
+    // Insert at the beginning of modal body
+    const modalBody = document.querySelector(`#${modalId} .modal-body`);
+    modalBody.insertBefore(errorDiv, modalBody.firstChild);
+  }
+
+  // Show success message in modal
+  function showModalSuccess(modalId, message) {
+    // Remove any existing error message
+    const existingError = document.querySelector(`#${modalId} .error-message`);
+    if (existingError) {
+      existingError.remove();
+    }
+    
+    // Create success message
+    const successDiv = document.createElement('div');
+    successDiv.className = 'success-message';
+    successDiv.style.cssText = `
+      background-color: #eef;
+      color: #2c5;
+      padding: 10px;
+      border: 1px solid #beb;
+      border-radius: 4px;
+      margin-bottom: 15px;
+      font-size: 14px;
+    `;
+    successDiv.textContent = message;
+    
+    // Insert at the beginning of modal body
+    const modalBody = document.querySelector(`#${modalId} .modal-body`);
+    modalBody.insertBefore(successDiv, modalBody.firstChild);
+  }
+
+  // Clear error messages from modal
+  function clearModalError(modalId) {
+    const existingError = document.querySelector(`#${modalId} .error-message`);
+    if (existingError) {
+      existingError.remove();
+    }
+  }
+</script>
