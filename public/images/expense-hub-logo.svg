@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="150" viewBox="0 0 600 150">
+  <!-- Octagonal icon -->
+  <path d="M75,30 L125,30 L150,75 L125,120 L75,120 L50,75 L75,30" fill="#2D3142"/>
+  
+  <!-- Arrow/path elements inside octagon -->
+  <path d="M85,50 L115,50 L115,70 L135,70 L115,90 L115,100 L85,100 L85,90 L65,90 L65,70 L85,70 Z" fill="#ffffff"/>
+  
+  <!-- Text "Expense" -->
+  <text x="175" y="100" font-family="Arial, sans-serif" font-weight="bold" font-size="72" fill="#2D3142">Expense</text>
+  
+  <!-- Text "Hub" -->
+  <text x="465" y="100" font-family="Arial, sans-serif" font-weight="bold" font-size="72" fill="#1CC2A3">Hub</text>
+</svg>

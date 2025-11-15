@@ -1,0 +1,2 @@
+<!-- This is just a placeholder to note that we need a real PNG/JPG file here -->
+<!-- The actual image file will be copied from the user's attachment -->
