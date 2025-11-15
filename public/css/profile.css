@@ -1,0 +1,97 @@
+.profile-info, .security-info, .preferences-info {
+  padding: 1rem 0;
+}
+
+.profile-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.profile-item:last-child {
+  border-bottom: none;
+}
+
+.profile-label {
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.profile-value {
+  color: var(--color-text-primary);
+}
+
+.danger-zone {
+  border-color: var(--color-danger);
+}
+
+.danger-zone .dashboard-card-header {
+  border-bottom-color: var(--color-danger);
+}
+
+.danger-zone .dashboard-card-title {
+  color: var(--color-danger);
+}
+
+.danger-actions {
+  padding: 1rem 0;
+  text-align: center;
+}
+
+.danger-text {
+  margin-top: 0.75rem;
+  color: var(--color-danger);
+  font-size: 0.9rem;
+}
+
+.action-btn-danger {
+  background-color: var(--color-danger);
+  color: white;
+}
+
+.action-btn-danger:hover {
+  background-color: #d32f2f;
+}
+
+.checkbox-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.checkbox-group input[type="checkbox"] {
+  margin: 0;
+}
+
+.category-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.category-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  background-color: var(--color-bg-secondary);
+  border-radius: var(--radius-sm);
+}
+
+.delete-category-btn {
+  padding: 0.25rem 0.5rem;
+  background-color: transparent;
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.delete-category-btn:hover {
+  background-color: var(--color-danger);
+  color: white;
+}

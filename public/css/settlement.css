@@ -1,0 +1,71 @@
+/* Settlement Button Styling */
+.settle-balance-btn {
+  background-color: var(--success-color);
+  color: white;
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.settle-balance-btn:hover {
+  background-color: var(--success-dark);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Modal fix */
+.modal-overlay {
+  z-index: 2000 !important;
+}
+
+.modal-overlay.active {
+  display: flex !important;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Modal close button */
+.modal-close-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  line-height: 24px;
+  cursor: pointer;
+  color: var(--dark-color);
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.modal-close-btn:hover {
+  background-color: rgba(0,0,0,0.1);
+}
+
+.modal-header {
+  position: relative;
+}
+
+/* Debug helper */
+.debug-outline {
+  outline: 2px solid red;
+}
+
+/* Mobile optimization for settlement modal */
+@media (max-width: 576px) {
+  .modal {
+    width: 95%;
+    max-width: none;
+  }
+  
+  .settlement-form .form-group {
+    margin-bottom: 0.75rem;
+  }
+}

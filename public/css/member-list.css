@@ -1,0 +1,43 @@
+.member-list {
+  list-style-type: none;
+  padding-left: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: 8px;
+}
+
+.member-list li {
+  margin-bottom: 5px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  background-color: #f0f2f5;
+  font-weight: 500;
+  transition: background-color 0.2s ease;
+}
+
+.member-list li:hover {
+  background-color: #e4e6eb;
+}
+
+/* Styling for the multi-select dropdown */
+.member-select {
+  min-height: 100px;
+  padding: 8px;
+}
+
+.member-select option {
+  padding: 8px;
+  margin-bottom: 4px;
+  border-radius: 4px;
+}
+
+.member-select option:checked {
+  background-color: #e7f3ff;
+  color: #0066cc;
+}
+
+.form-hint {
+  font-size: 0.8rem;
+  color: #666;
+  margin-top: 4px;
+}
