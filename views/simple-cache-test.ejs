@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Cache Test - ExpenseHub</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .btn {
+            background: #1CC2A3;
+            color: white;
+            border: none;
+            padding: 15px 25px;
+            margin: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .btn:hover {
+            background: #16a085;
+        }
+        .btn-danger {
+            background: #e74c3c;
+        }
+        .result {
+            background: #f8f9fa;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+            border-left: 4px solid #1CC2A3;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-box {
+            background: #e3f2fd;
+            padding: 20px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1976d2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Simple Browser Storage Test</h1>
+        <p>Direct testing of localStorage, sessionStorage, and IndexedDB without any complex frameworks.</p>
+        
+        <!-- Statistics -->
+        <div class="stats">
+            <div class="stat-box">
+                <div class="stat-number" id="localStorage-count">0</div>
+                <div>localStorage Items</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-number" id="sessionStorage-count">0</div>
+                <div>sessionStorage Items</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-number" id="indexedDB-count">0</div>
+                <div>IndexedDB Items</div>
+            </div>
+        </div>
+        
+        <!-- Test Buttons -->
+        <h3>Test Browser Storage:</h3>
+        <button class="btn" onclick="testLocalStorage()">📦 Test localStorage</button>
+        <button class="btn" onclick="testSessionStorage()">⏱️ Test sessionStorage</button>
+        <button class="btn" onclick="testIndexedDB()">🗃️ Test IndexedDB</button>
+        <button class="btn" onclick="testAll()">🧪 Test All Storage</button>
+        <button class="btn btn-danger" onclick="clearAll()">🗑️ Clear All</button>
+        
+        <!-- Results -->
+        <h3>Results:</h3>
+        <div id="results" class="result">Click a test button to see results...</div>
+        
+        <h3>Storage Contents:</h3>
+        <div id="storage-contents" class="result">No data to display</div>
+    </div>
+
+    <script>
+        function log(message) {
+            const results = document.getElementById('results');
+            results.textContent += new Date().toLocaleTimeString() + ': ' + message + '\n';
+        }
+
+        function updateStats() {
+            // localStorage count
+            let localCount = 0;
+            for (let i = 0; i < localStorage.length; i++) {
+                if (localStorage.key(i).startsWith('expensehub_')) {
+                    localCount++;
+                }
+            }
+            document.getElementById('localStorage-count').textContent = localCount;
+            
+            // sessionStorage count  
+            let sessionCount = 0;
+            for (let i = 0; i < sessionStorage.length; i++) {
+                if (sessionStorage.key(i).startsWith('expensehub_')) {
+                    sessionCount++;
+                }
+            }
+            document.getElementById('sessionStorage-count').textContent = sessionCount;
+        }
+
+        function showStorageContents() {
+            let content = '';
+            
+            // localStorage
+            content += '📦 localStorage:\n';
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.startsWith('expensehub_')) {
+                    const value = localStorage.getItem(key);
+                    content += `  ${key}: ${value.substring(0, 50)}...\n`;
+                }
+            }
+            
+            // sessionStorage
+            content += '\n⏱️ sessionStorage:\n';
+            for (let i = 0; i < sessionStorage.length; i++) {
+                const key = sessionStorage.key(i);
+                if (key.startsWith('expensehub_')) {
+                    const value = sessionStorage.getItem(key);
+                    content += `  ${key}: ${value.substring(0, 50)}...\n`;
+                }
+            }
+            
+            document.getElementById('storage-contents').textContent = content || 'No ExpenseHub data found';
+            updateStats();
+        }
+
+        function testLocalStorage() {
+            log('Testing localStorage...');
+            
+            try {
+                const testData = {
+                    message: 'localStorage test successful!',
+                    timestamp: new Date().toISOString(),
+                    amount: 99.99,
+                    user: 'test_user'
+                };
+                
+                const key = 'expensehub_test_' + Date.now();
+                localStorage.setItem(key, JSON.stringify(testData));
+                
+                // Verify
+                const retrieved = JSON.parse(localStorage.getItem(key));
+                log('✅ localStorage: Data stored and retrieved successfully!');
+                log(`   Key: ${key}`);
+                log(`   Data: ${JSON.stringify(retrieved, null, 2)}`);
+                
+                showStorageContents();
+            } catch (error) {
+                log('❌ localStorage test failed: ' + error.message);
+            }
+        }
+
+        function testSessionStorage() {
+            log('Testing sessionStorage...');
+            
+            try {
+                const testData = {
+                    session: 'sessionStorage test successful!',
+                    id: Math.random(),
+                    timestamp: Date.now()
+                };
+                
+                const key = 'expensehub_session_' + Date.now();
+                sessionStorage.setItem(key, JSON.stringify(testData));
+                
+                // Verify
+                const retrieved = JSON.parse(sessionStorage.getItem(key));
+                log('✅ sessionStorage: Data stored and retrieved successfully!');
+                log(`   Key: ${key}`);
+                log(`   Data: ${JSON.stringify(retrieved, null, 2)}`);
+                
+                showStorageContents();
+            } catch (error) {
+                log('❌ sessionStorage test failed: ' + error.message);
+            }
+        }
+
+        function testIndexedDB() {
+            log('Testing IndexedDB...');
+            
+            try {
+                const request = indexedDB.open('ExpenseHubSimpleTest', 1);
+                
+                request.onerror = function() {
+                    log('❌ IndexedDB test failed: ' + request.error);
+                };
+                
+                request.onsuccess = function(event) {
+                    const db = event.target.result;
+                    log('✅ IndexedDB: Database opened successfully!');
+                    
+                    // Store test data
+                    const transaction = db.transaction(['expenses'], 'readwrite');
+                    const store = transaction.objectStore('expenses');
+                    
+                    const testExpense = {
+                        amount: 150.75,
+                        description: 'IndexedDB test expense',
+                        timestamp: Date.now()
+                    };
+                    
+                    const addRequest = store.add(testExpense);
+                    addRequest.onsuccess = function() {
+                        log('✅ IndexedDB: Test expense stored successfully!');
+                        document.getElementById('indexedDB-count').textContent = '1+';
+                    };
+                };
+                
+                request.onupgradeneeded = function(event) {
+                    const db = event.target.result;
+                    const store = db.createObjectStore('expenses', { keyPath: 'id', autoIncrement: true });
+                    log('✅ IndexedDB: Database created successfully!');
+                };
+            } catch (error) {
+                log('❌ IndexedDB test failed: ' + error.message);
+            }
+        }
+
+        function testAll() {
+            log('🧪 Running all storage tests...');
+            document.getElementById('results').textContent = '';
+            
+            testLocalStorage();
+            setTimeout(() => testSessionStorage(), 500);
+            setTimeout(() => testIndexedDB(), 1000);
+            
+            setTimeout(() => {
+                log('\n🎉 All tests completed!');
+                showStorageContents();
+            }, 2000);
+        }
+
+        function clearAll() {
+            if (!confirm('Clear all test data?')) return;
+            
+            log('🗑️ Clearing all test data...');
+            
+            // Clear localStorage
+            const localKeys = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.startsWith('expensehub_')) {
+                    localKeys.push(key);
+                }
+            }
+            localKeys.forEach(key => localStorage.removeItem(key));
+            
+            // Clear sessionStorage
+            const sessionKeys = [];
+            for (let i = 0; i < sessionStorage.length; i++) {
+                const key = sessionStorage.key(i);
+                if (key.startsWith('expensehub_')) {
+                    sessionKeys.push(key);
+                }
+            }
+            sessionKeys.forEach(key => sessionStorage.removeItem(key));
+            
+            // Clear IndexedDB
+            indexedDB.deleteDatabase('ExpenseHubSimpleTest');
+            
+            log('✅ All test data cleared!');
+            showStorageContents();
+        }
+
+        // Initialize
+        showStorageContents();
+    </script>
+</body>
+</html>
