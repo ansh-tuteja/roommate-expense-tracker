@@ -1,0 +1,107 @@
+<section class="hero">
+    <div class="container">
+        <div class="hero-content">
+            <div class="hero-text">
+                <h1>Less stress when <span class="text-gradient">sharing expenses</span></h1>
+                <div class="hero-tagline">
+                    <p>Keep track of your shared expenses and balances with housemates, trips, groups, friends, and family.</p>
+                </div>
+                <div class="hero-features">
+                    <div class="feature">
+                        <div class="feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"></path></svg>
+                        </div>
+                        <div class="feature-text">Secure and private</div>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"></rect><line x1="2" x2="22" y1="10" y2="10"></line></svg>
+                        </div>
+                        <div class="feature-text">Track payments</div>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                        </div>
+                        <div class="feature-text">Split easily</div>
+                    </div>
+                </div>
+                <div class="hero-actions">
+                    <% if (typeof user === 'undefined' || !user) { %>
+                        <a href="/register" class="btn btn-primary btn-large">Sign up for free</a>
+                        <a href="/login" class="btn btn-outline">Log in</a>
+                    <% } else { %>
+                        <a href="/dashboard" class="btn btn-primary btn-large">Go to Dashboard</a>
+                    <% } %>
+                </div>
+            </div>
+            <div class="hero-image">
+                <img src="https://images.unsplash.com/photo-1554224155-6726b3ff858f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1926&q=80" alt="People sharing expenses">
+                <div class="hero-image-overlay"></div>
+                <div class="floating-card card-1">
+                    <div class="card-header">
+                        <div class="card-title">Dinner</div>
+                        <div class="card-amount">$85.50</div>
+                    </div>
+                    <div class="card-users">
+                        <div class="user-avatar">JS</div>
+                        <div class="user-avatar">AT</div>
+                        <div class="user-avatar">MK</div>
+                    </div>
+                </div>
+                <div class="floating-card card-2">
+                    <div class="card-icon">✓</div>
+                    <div class="card-text">Settled up!</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="benefits">
+    <div class="container">
+        <h2 class="section-title">Why use ExpenseHub?</h2>
+        <div class="benefits-grid">
+            <div class="benefit-card">
+                <div class="benefit-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"></path><path d="M3.34 19a10 10 0 1 1 17.32 0"></path><path d="M18 22H6"></path><path d="M15 13v9"></path><path d="M9 13v9"></path></svg>
+                </div>
+                <h3>Track balances</h3>
+                <p>Keep track of shared expenses, balances, and who owes who.</p>
+            </div>
+            <div class="benefit-card">
+                <div class="benefit-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"></path><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"></path><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"></path><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path></svg>
+                </div>
+                <h3>Split expenses</h3>
+                <p>Split bills and expenses with roommates, trips, groups, friends & family.</p>
+            </div>
+            <div class="benefit-card">
+                <div class="benefit-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 3 4 8 5-5 5 15H2L8 3z"></path></svg>
+                </div>
+                <h3>Simplify groups</h3>
+                <p>Create groups for trips, apartments, and more to organize expenses.</p>
+            </div>
+            <div class="benefit-card">
+                <div class="benefit-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+                </div>
+                <h3>Find expenses</h3>
+                <p>Easily search and find past expenses, who paid what, and when.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="cta">
+    <div class="container">
+        <div class="cta-content">
+            <h2>Ready to start sharing expenses?</h2>
+            <p>Join thousands of others who use ExpenseHub to track and split expenses with friends, roommates, and travel companions.</p>
+            <a href="/register" class="btn btn-primary btn-large">Sign up now - it's free!</a>
+        </div>
+    </div>
+</section>
+
+

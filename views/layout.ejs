@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ExpenseHub</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/dashboard.css" />
+    <link rel="stylesheet" href="/css/dashboard-additions.css" />
+    <link rel="stylesheet" href="/css/member-list.css" />
+    <link rel="stylesheet" href="/css/profile.css" />
+    <link rel="stylesheet" href="/css/settlement.css" />
+    <link rel="stylesheet" href="/css/settlements.css" />
+    
+    <!-- Browser caching and offline support -->
+    <script src="/js/cache.js"></script>
+    
+    <!-- Cache control headers -->
+    <meta http-equiv="Cache-Control" content="private, max-age=300">
+    <meta http-equiv="Pragma" content="cache">
+    <meta name="theme-color" content="#1CC2A3">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <div class="nav-logo-section">
+                <a href="/" class="logo">
+                    <img src="/images/expense-hub-logo.svg" alt="ExpenseHub Logo" class="logo-image">
+                </a>
+            </div>
+            <div class="nav-sections">
+                <div class="auth-nav">
+                    <% if (typeof user !== 'undefined' && user) { %>
+                        <a href="/dashboard">Dashboard</a>
+                        <a href="/settlements" class="settlements-nav">
+                            Settlements
+                            <span class="notification-count" id="settlementNotifications" style="display: none;"></span>
+                        </a>
+                        <a href="/profile">Profile</a>
+                        <form action="/logout" method="post" class="inline-form">
+                            <button type="submit" class="btn-nav">Logout</button>
+                        </form>
+                    <% } else { %>
+                        <a href="/login" class="nav-login">Log in</a>
+                        <a href="/register" class="btn btn-primary">Sign up</a>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <%- body %>
+    </main>
+
+    <footer class="main-footer">
+        <div class="footer-content">
+            <div class="footer-links">
+                <div class="footer-column">
+                    <h4>ExpenseHub</h4>
+                    <ul>
+                        <li><a href="/about">About</a></li>
+                        <li><a href="/features">Features</a></li>
+                        <li><a href="/contact">Contact</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-info">
+                <div class="footer-social">
+                    <a href="#" class="social-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"></path></svg></a>
+                    <a href="#" class="social-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path></svg></a>
+                    <a href="#" class="social-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg></a>
+                </div>
+                <div class="footer-apps">
+                    <a href="#" class="app-button">
+                        <img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play">
+                    </a>
+                    <a href="#" class="app-button">
+                        <img src="https://developer.apple.com/app-store/marketing/guidelines/images/badge-download-on-the-app-store.svg" alt="Download on the App Store">
+                    </a>
+                </div>
+                <div class="footer-copyright">
+                    <p>Made with :) in your city &nbsp;•&nbsp; &copy; <%= new Date().getFullYear() %> ExpenseHub</p>
+                </div>
+            </div>
+        </div>
+        <div class="footer-mountains">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 160" preserveAspectRatio="none">
+                <polygon fill="#4D545D" points="0,0 100,40 200,20 300,60 400,40 500,80 600,100 700,60 800,80 900,20 1000,60 1100,80 1200,40 1300,60 1400,30 1440,50 1440,160 0,160"/>
+                <polygon fill="#1CC2A3" points="0,40 100,70 200,40 300,90 400,60 500,100 600,80 700,110 800,90 900,120 1000,80 1100,100 1200,70 1300,90 1440,70 1440,160 0,160"/>
+                <polygon fill="#FF7657" points="0,80 100,100 200,80 300,120 400,90 500,130 600,110 700,140 800,120 900,140 1000,100 1100,130 1200,100 1300,120 1440,100 1440,160 0,160"/>
+                <polygon fill="#9CD4C8" points="0,120 100,140 200,120 300,150 400,130 500,160 600,140 700,160 800,140 900,160 1000,130 1100,150 1200,140 1300,155 1440,140 1440,160 0,160"/>
+            </svg>
+        </div>
+    </footer>
+</body>
+</html>
+
