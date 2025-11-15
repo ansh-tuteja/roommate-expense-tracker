@@ -1,0 +1,31 @@
+<!-- Settlement Modal -->
+<div class="modal-overlay" id="settlementModal" style="display:none;">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title">Record Settlement</h3>
+      <button type="button" class="modal-close-btn" id="closeSettlementXBtn">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p id="settlementDescription"></p>
+      <form id="settlementForm" class="settlement-form">
+        <input type="hidden" id="settlementDebtorId" name="debtorId">
+        <input type="hidden" id="settlementCreditorId" name="creditorId">
+        <input type="hidden" name="groupId" id="settlementGroupId">
+        
+        <div class="form-group">
+          <label for="settlementAmount">Amount (₹)</label>
+          <input type="number" id="settlementAmount" name="amount" min="0" step="0.01" required>
+        </div>
+        
+        <div class="form-group">
+          <label for="settlementDescriptionInput">Description (Optional)</label>
+          <textarea id="settlementDescriptionInput" name="description" placeholder="e.g., Settling dinner expenses">Settlement payment</textarea>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="action-btn action-btn-secondary" id="closeSettlementBtn">Cancel</button>
+      <button type="button" class="action-btn action-btn-primary" id="submitSettlementBtn">Record Settlement</button>
+    </div>
+  </div>
+</div>

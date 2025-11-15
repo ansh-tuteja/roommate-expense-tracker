@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ExpenseHub Demo Guide</title>
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            line-height: 1.6;
+            color: #2D3142;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #1CC2A3;
+            border-bottom: 3px solid #1CC2A3;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #5BC5A7;
+            margin-top: 30px;
+        }
+        .method {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .method h3 {
+            margin-top: 0;
+            color: #1CC2A3;
+        }
+        .step {
+            margin-bottom: 15px;
+        }
+        .step-number {
+            display: inline-block;
+            width: 25px;
+            height: 25px;
+            background: #1CC2A3;
+            color: white;
+            text-align: center;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        code {
+            background: #eaf1fb;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+        .note {
+            background: #fff9e0;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #1CC2A3;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: 600;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>ExpenseHub Demo Guide</h1>
+    
+    <p>This guide will help you demonstrate the ExpenseHub application to faculty using two different user accounts simultaneously.</p>
+    
+    <h2>Why You Need Different Browser Contexts</h2>
+    <p>Web browsers share cookies across tabs and windows by default. This means if you log in as User 1 in one tab and User 2 in another tab, the second login will overwrite the first, causing User 1 to be logged out.</p>
+    
+    <h2>Methods to Demonstrate Multiple Users</h2>
+    
+    <div class="method">
+        <h3>Method 1: Different Browsers (Recommended)</h3>
+        <div class="step">
+            <span class="step-number">1</span>
+            Open Chrome and login as User 1
+        </div>
+        <div class="step">
+            <span class="step-number">2</span>
+            Open Firefox (or Edge) and login as User 2
+        </div>
+        <div class="step">
+            <span class="step-number">3</span>
+            Place the windows side by side for a clear demonstration
+        </div>
+    </div>
+    
+    <div class="method">
+        <h3>Method 2: Incognito/Private Window</h3>
+        <div class="step">
+            <span class="step-number">1</span>
+            Open a regular browser window and login as User 1
+        </div>
+        <div class="step">
+            <span class="step-number">2</span>
+            Open an incognito/private window (Ctrl+Shift+N in Chrome) and login as User 2
+        </div>
+        <div class="step">
+            <span class="step-number">3</span>
+            Arrange both windows side by side
+        </div>
+    </div>
+    
+    <div class="method">
+        <h3>Method 3: Chrome Profiles</h3>
+        <div class="step">
+            <span class="step-number">1</span>
+            In Chrome, click on your profile icon in the top-right corner
+        </div>
+        <div class="step">
+            <span class="step-number">2</span>
+            Choose "Add" to create a new profile
+        </div>
+        <div class="step">
+            <span class="step-number">3</span>
+            Login as User 1 in one profile and User 2 in the other profile
+        </div>
+    </div>
+    
+    <h2>Demonstrating Group Sharing</h2>
+    
+    <div class="step">
+        <span class="step-number">1</span>
+        In the User 1 window, create a new group by clicking "Create Group"
+    </div>
+    <div class="step">
+        <span class="step-number">2</span>
+        Once created, find the group under "Your Groups" and copy the Group ID using the copy icon (📋)
+    </div>
+    <div class="step">
+        <span class="step-number">3</span>
+        In the User 2 window, click "Join Group" and paste the Group ID
+    </div>
+    <div class="step">
+        <span class="step-number">4</span>
+        Show how User 2 is now a member of the group created by User 1
+    </div>
+    <div class="step">
+        <span class="step-number">5</span>
+        Create a group expense in either account and demonstrate how it appears for both users
+    </div>
+    
+    <div class="note">
+        <strong>Note:</strong> If you encounter any session issues, try clearing your browser cookies or using one of the other methods described above.
+    </div>
+    
+    <a href="/dashboard" class="btn">Return to Dashboard</a>
+</body>
+</html>

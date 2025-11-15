@@ -1,0 +1,238 @@
+<div class="container">
+  <div class="form-container">
+    <h1>Edit Expense</h1>
+    
+    <form action="/expenses/<%= expense._id %>?_method=PUT" method="POST" class="expense-form">
+      <!-- Hidden field to ensure expense type is always sent -->
+      <input type="hidden" name="originalExpenseType" value="<%= expense.isPersonal ? 'personal' : 'group' %>">
+      
+      <div class="form-group">
+        <label for="description">Description</label>
+        <input type="text" id="description" name="description" value="<%= expense.description %>" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="amount">Amount (₹)</label>
+        <input type="number" id="amount" name="amount" min="0" step="0.01" value="<%= expense.amount %>" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="category">Category</label>
+        <select id="category" name="category">
+          <% const categories = ['Food', 'Transportation', 'Shopping', 'Entertainment', 'Utilities', 'Health', 'Education', 'Travel', 'Other']; %>
+          <% if (user && user.customCategories) { %>
+            <% categories.push(...user.customCategories); %>
+          <% } %>
+          <% categories.forEach(cat => { %>
+            <option value="<%= cat %>" <%= expense.category === cat ? 'selected' : '' %>><%= cat %></option>
+          <% }); %>
+        </select>
+      </div>
+      
+      <% if (!expense.isSettlement) { %>
+        <div class="form-group">
+          <label>Type</label>
+          <div class="expense-type-selector">
+            <label>
+              <input type="radio" name="expenseType" value="personal" <%= expense.isPersonal ? 'checked' : '' %> onchange="toggleGroupOptions()" required>
+              Personal
+            </label>
+            <label>
+              <input type="radio" name="expenseType" value="group" <%= !expense.isPersonal ? 'checked' : '' %> onchange="toggleGroupOptions()" required>
+              Group
+            </label>
+          </div>
+        </div>
+        
+        <div id="groupOptions" <%= expense.isPersonal ? 'style="display: none;"' : '' %>>
+          <div class="form-group">
+            <label for="groupId">Group</label>
+            <select id="groupId" name="groupId">
+              <% groups.forEach(group => { %>
+                <option value="<%= group._id %>" <%= expense.groupId && expense.groupId.toString() === group._id.toString() ? 'selected' : '' %>><%= group.groupName %></option>
+              <% }); %>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <label for="splitAmong">Split Among</label>
+            <select id="splitAmong" name="splitAmong" multiple>
+              <% const expenseSplitAmong = expense.splitAmong ? expense.splitAmong.map(id => id.toString()) : []; %>
+              <% users.forEach(user => { %>
+                <option value="<%= user._id %>" <%= expenseSplitAmong.includes(user._id.toString()) ? 'selected' : '' %>><%= user.username %></option>
+              <% }); %>
+            </select>
+            <small>Hold Ctrl/Cmd to select multiple. Default: all group members</small>
+          </div>
+        </div>
+      <% } else { %>
+        <input type="hidden" name="isSettlement" value="true">
+        <div class="form-group">
+          <p><strong>Settlement payment:</strong> This expense represents a settlement payment and cannot be converted to a regular expense.</p>
+        </div>
+      <% } %>
+      
+      <div class="form-group">
+        <label for="notes">Notes (Optional)</label>
+        <textarea id="notes" name="notes"><%= expense.notes || '' %></textarea>
+      </div>
+      
+      <div class="form-actions">
+        <a href="/dashboard" class="action-btn action-btn-secondary">Cancel</a>
+        <button type="submit" class="action-btn action-btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Server-side data stored in data attributes -->
+<% 
+  const clientData = {
+    currentUserId: expense && expense.paidBy ? expense.paidBy : "",
+    currentUserName: user ? user.username : "",
+    previousSelections: expense && expense.splitAmong ? expense.splitAmong.map(id => id.toString()) : []
+  };
+%>
+<div id="server-data" 
+     data-current-user-id="<%= clientData.currentUserId %>" 
+     data-current-user-name="<%= clientData.currentUserName %>" 
+     data-previous-selections="<%- JSON.stringify(clientData.previousSelections) %>" 
+     style="display: none;"></div>
+
+<script>
+  // Client-side JavaScript
+  function getServerData() {
+    const dataElement = document.getElementById('server-data');
+    return {
+      currentUserId: dataElement.dataset.currentUserId || '',
+      currentUserName: dataElement.dataset.currentUserName || '',
+      previousSelections: JSON.parse(dataElement.dataset.previousSelections || '[]')
+    };
+  }
+  
+  function toggleGroupOptions() {
+    console.log('toggleGroupOptions called'); // Debug log
+    const expenseTypeRadio = document.querySelector('input[name="expenseType"]:checked');
+    const groupOptions = document.getElementById('groupOptions');
+    
+    if (!expenseTypeRadio) {
+      console.log('No expense type selected');
+      return;
+    }
+    
+    const expenseType = expenseTypeRadio.value;
+    console.log('Selected expense type:', expenseType); // Debug log
+    
+    if (expenseType === 'personal') {
+      groupOptions.style.display = 'none';
+      console.log('Hiding group options');
+      // Clear group-related fields when switching to personal
+      const groupSelect = document.getElementById('groupId');
+      const splitAmongSelect = document.getElementById('splitAmong');
+      if (groupSelect) groupSelect.value = '';
+      if (splitAmongSelect) splitAmongSelect.innerHTML = '';
+    } else if (expenseType === 'group') {
+      groupOptions.style.display = 'block';
+      console.log('Showing group options');
+      // Load members for the currently selected group
+      updateGroupMembers();
+    }
+  }
+  
+  async function updateGroupMembers() {
+    const groupSelect = document.getElementById('groupId');
+    const splitAmongSelect = document.getElementById('splitAmong');
+    
+    if (!groupSelect.value) {
+      splitAmongSelect.innerHTML = '<option value="">Select a group first</option>';
+      return;
+    }
+    
+    try {
+      const response = await fetch(`/api/groups/${groupSelect.value}/members?includeCurrentUser=true`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        const members = data.members;
+        
+        // Clear current options
+        splitAmongSelect.innerHTML = '';
+        
+        // Get server data once
+        const serverData = getServerData();
+        
+        // Add all group members (API now includes current user)
+        members.forEach(member => {
+          const option = document.createElement('option');
+          option.value = member._id;
+          // Mark current user for clarity
+          const isCurrentUser = member._id === serverData.currentUserId;
+          option.textContent = member.username + (isCurrentUser ? ' (You)' : '');
+          splitAmongSelect.appendChild(option);
+        });
+        
+        // Restore previous selections if any
+        if (serverData.previousSelections.length > 0) {
+          Array.from(splitAmongSelect.options).forEach(option => {
+            if (serverData.previousSelections.includes(option.value)) {
+              option.selected = true;
+            }
+          });
+        }
+        
+        // Reinitialize select2 if it's available
+        if (typeof $ !== 'undefined' && $.fn.select2) {
+          $('#splitAmong').select2('destroy').select2({
+            placeholder: 'Select members to split with',
+            allowClear: true
+          });
+        }
+      } else {
+        splitAmongSelect.innerHTML = '<option value="">Error loading members</option>';
+      }
+    } catch (error) {
+      console.error('Error loading group members:', error);
+      splitAmongSelect.innerHTML = '<option value="">Error loading members</option>';
+    }
+  }
+  
+  // Add event listener for group selection change
+  document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM Content Loaded'); // Debug log
+    
+    // Add event listeners for radio buttons
+    const radioButtons = document.querySelectorAll('input[name="expenseType"]');
+    radioButtons.forEach(radio => {
+      radio.addEventListener('change', toggleGroupOptions);
+    });
+    
+    // Add event listener for group selection dropdown
+    const groupSelect = document.getElementById('groupId');
+    if (groupSelect) {
+      groupSelect.addEventListener('change', updateGroupMembers);
+    }
+    
+    // Initialize select2 for better UX if it's included
+    if (typeof $ !== 'undefined' && $.fn.select2) {
+      $('#splitAmong').select2({
+        placeholder: 'Select members to split with',
+        allowClear: true
+      });
+      
+      $('#category').select2({
+        minimumResultsForSearch: 5
+      });
+    }
+    
+    // Initialize the form based on current state
+    const currentExpenseType = document.querySelector('input[name="expenseType"]:checked')?.value;
+    console.log('Initial expense type:', currentExpenseType); // Debug log
+    
+    if (currentExpenseType === 'group') {
+      document.getElementById('groupOptions').style.display = 'block';
+      updateGroupMembers();
+    } else {
+      document.getElementById('groupOptions').style.display = 'none';
+    }
+  });
+</script>
