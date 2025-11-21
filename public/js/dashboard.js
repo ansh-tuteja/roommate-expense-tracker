@@ -3,10 +3,8 @@
 // Dashboard data caching
 let currentUserId = null;
 
-// Initialize caching when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
   initializeCaching();
-  setupExpenseActions();
 });
 
 // Initialize browser-side caching
@@ -17,11 +15,19 @@ function initializeCaching() {
     currentUserId = userElement.getAttribute('data-user-id');
   }
   
-  // Try to load dashboard data from cache first
-  loadCachedDashboardData();
-  
-  // Cache current page data
-  cacheDashboardData();
+  if (!currentUserId) {
+    return;
+  }
+  primeDashboardCacheFromDom();
+  const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+  if (!isOnline) {
+    loadCachedDashboardData();
+  }
+  refreshDashboardSummary();
+
+  window.addEventListener('online', () => {
+    refreshDashboardSummary();
+  });
 }
 
 // Handle expense actions (edit and delete)
@@ -51,11 +57,8 @@ function setupExpenseActions() {
             window.DashboardCache.invalidateUser(currentUserId);
           }
           
-          // Refresh the page to show updated data
-          showNotification('Expense deleted successfully', 'success');
-          setTimeout(() => {
-            window.location.reload();
-          }, 1000);
+          // Refresh the page immediately to show updated data
+          window.location.reload();
         } else {
           const errorData = await response.json();
           showNotification(errorData.error || 'Failed to delete expense', 'error');
@@ -71,7 +74,18 @@ function setupExpenseActions() {
 // Handle settlement actions
 function setupSettlementActions() {
   // Settlement buttons
-  document.querySelectorAll('.settle-balance-btn').forEach(btn => {
+  const settleButtons = document.querySelectorAll('.settle-balance-btn');
+  console.log(`Found ${settleButtons.length} settle buttons`);
+  
+  settleButtons.forEach((btn, index) => {
+    console.log(`Settle button ${index}:`, {
+      debtor: btn.dataset.debtor,
+      creditor: btn.dataset.creditor,
+      amount: btn.dataset.amount,
+      debtorName: btn.dataset.debtorName,
+      creditorName: btn.dataset.creditorName
+    });
+    
     btn.addEventListener('click', function(event) {
       event.preventDefault();
       event.stopPropagation();
@@ -82,10 +96,24 @@ function setupSettlementActions() {
       const debtorName = this.dataset.debtorName;
       const creditorName = this.dataset.creditorName;
       
+      console.log('Settle button clicked with data:', {
+        debtorId,
+        creditorId,
+        amount,
+        debtorName,
+        creditorName
+      });
+      
       // Fill settlement form
       document.getElementById('settlementAmount').value = amount;
       document.getElementById('settlementDebtorId').value = debtorId;
       document.getElementById('settlementCreditorId').value = creditorId;
+      
+      console.log('Form fields set to:', {
+        debtorId: document.getElementById('settlementDebtorId').value,
+        creditorId: document.getElementById('settlementCreditorId').value,
+        amount: document.getElementById('settlementAmount').value
+      });
       
       // Update settlement modal text
       document.getElementById('settlementDescription').textContent = 
@@ -187,6 +215,22 @@ async function submitSettlementForm(form) {
     return;
   }
   
+  // Validate debtor and creditor IDs
+  const debtorIdField = form.querySelector('#settlementDebtorId');
+  const creditorIdField = form.querySelector('#settlementCreditorId');
+  
+  if (!debtorIdField || !debtorIdField.value) {
+    console.error('Debtor ID is missing!');
+    showNotification('Error: Debtor ID is missing. Please try clicking the settle button again.', 'error');
+    return;
+  }
+  
+  if (!creditorIdField || !creditorIdField.value) {
+    console.error('Creditor ID is missing!');
+    showNotification('Error: Creditor ID is missing. Please try clicking the settle button again.', 'error');
+    return;
+  }
+  
   // Show loading state
   const submitBtn = document.getElementById('submitSettlementBtn');
   const originalBtnText = submitBtn.textContent;
@@ -202,6 +246,8 @@ async function submitSettlementForm(form) {
     groupId: formData.get('groupId') || null
   };
   
+  console.log('Settlement data being sent:', settlementData);
+  
   try {
     const response = await fetch('/settlements', {
       method: 'POST',
@@ -210,6 +256,8 @@ async function submitSettlementForm(form) {
       },
       body: JSON.stringify(settlementData)
     });
+    
+    console.log('Settlement response status:', response.status);
     
     if (response.ok) {
       // Close modal properly with fade-out animation
@@ -234,12 +282,14 @@ async function submitSettlementForm(form) {
       let errorMessage = 'Failed to record settlement';
       try {
         const errorData = await response.json();
+        console.error('Server error response:', errorData);
         errorMessage = errorData.error || errorMessage;
       } catch (parseError) {
         console.error('Error parsing response:', parseError);
         errorMessage = 'Network error - please try again';
       }
       
+      console.error('Settlement submission failed:', errorMessage);
       showNotification(errorMessage, 'error');
       
       // Reset button state
@@ -573,32 +623,260 @@ function setupNotificationActions() {
 }
 
 // Browser-side caching functions
-function loadCachedDashboardData() {
-  if (!window.DashboardCache || !currentUserId) return;
-  
-  const cachedData = window.DashboardCache.getDashboard(currentUserId);
-  if (cachedData) {
-    console.log('Loaded dashboard data from cache');
-    // Could update UI elements here with cached data if needed
+function formatCurrency(value) {
+  const num = Number(value);
+  if (Number.isNaN(num)) {
+    return '₹0.00';
+  }
+  return `₹${num.toFixed(2)}`;
+}
+
+function parseCurrencyValue(text) {
+  if (!text) return 0;
+  const numeric = Number(text.replace(/[^0-9.-]+/g, ''));
+  return Number.isNaN(numeric) ? 0 : numeric;
+}
+
+function updateSummaryCards(summary = {}) {
+  const personalEl = document.querySelector('.personal-spending');
+  if (personalEl && summary.personalMonthlyTotal !== undefined) {
+    personalEl.textContent = formatCurrency(summary.personalMonthlyTotal);
+  }
+
+  const groupEl = document.querySelector('.group-spending');
+  if (groupEl && summary.groupMonthlyTotal !== undefined) {
+    groupEl.textContent = formatCurrency(summary.groupMonthlyTotal);
+  }
+
+  const owedEl = document.querySelector('.total-owed');
+  if (owedEl && summary.totalOwed !== undefined) {
+    owedEl.textContent = formatCurrency(summary.totalOwed);
+  }
+
+  const owedToYouEl = document.querySelector('.total-owed-to-you');
+  if (owedToYouEl && summary.totalOwedToUser !== undefined) {
+    owedToYouEl.textContent = formatCurrency(summary.totalOwedToUser);
   }
 }
 
-function cacheDashboardData() {
-  if (!window.DashboardCache || !currentUserId) return;
+function updateGroupSummaryCards(groupSummaries = []) {
+  const container = document.querySelector('.group-summary-grid');
+  if (!container || !Array.isArray(groupSummaries)) {
+    return;
+  }
+
+  const existingCards = Array.from(container.querySelectorAll('.group-summary-card'));
+  const cardMap = new Map();
+  existingCards.forEach((card) => {
+    cardMap.set(card.getAttribute('data-group-summary-id'), card);
+  });
+
+  groupSummaries.forEach((summary) => {
+    if (!summary || !summary.groupId) return;
+    let card = cardMap.get(summary.groupId);
+    if (!card) {
+      card = document.createElement('div');
+      card.className = 'summary-card group-summary-card';
+      card.setAttribute('data-group-summary-id', summary.groupId);
+      card.innerHTML = `
+        <div class="summary-card-title group-summary-name"></div>
+        <div class="summary-card-value group-summary-share"></div>
+        <div class="summary-card-subtitle">Your share this month</div>
+        <div class="group-summary-meta">
+          <span class="group-summary-total"></span>
+          <span class="group-summary-paid"></span>
+          <span class="group-summary-members"></span>
+        </div>`;
+      container.appendChild(card);
+      cardMap.set(summary.groupId, card);
+    }
+
+    const nameEl = card.querySelector('.group-summary-name');
+    if (nameEl) nameEl.textContent = summary.groupName || 'Group';
+    const shareEl = card.querySelector('.group-summary-share');
+    if (shareEl) shareEl.textContent = formatCurrency(summary.yourShareThisMonth);
+    const totalEl = card.querySelector('.group-summary-total');
+    if (totalEl) totalEl.textContent = `Total group spend: ${formatCurrency(summary.totalGroupSpendThisMonth)}`;
+    const paidEl = card.querySelector('.group-summary-paid');
+    if (paidEl) paidEl.textContent = `You paid: ${formatCurrency(summary.youPaidThisMonth)}`;
+    const membersEl = card.querySelector('.group-summary-members');
+    if (membersEl) membersEl.textContent = `Members: ${summary.memberCount || 0}`;
+  });
+}
+
+function updateBalancesSection(netBalances, userIdMap) {
+  const balancesCard = document.querySelector('.dashboard-sidebar .dashboard-card');
+  if (!balancesCard) return;
+
+  const entries = Object.entries(netBalances);
   
-  try {
-    // Collect dashboard data from DOM
-    const dashboardData = {
-      personalSpending: document.querySelector('.personal-spending')?.textContent || '₹0.00',
-      groupSpending: document.querySelector('.group-spending')?.textContent || '₹0.00',
-      timestamp: Date.now()
-    };
+  // Find the existing list or the "all settled up" message
+  let existingList = balancesCard.querySelector('ul');
+  let settledMessage = balancesCard.querySelector('p');
+  
+  if (entries.length === 0) {
+    // Remove list if exists
+    if (existingList) {
+      existingList.remove();
+    }
+    // Show or create settled message
+    if (!settledMessage) {
+      settledMessage = document.createElement('p');
+      balancesCard.appendChild(settledMessage);
+    }
+    settledMessage.textContent = \"You're all settled up!\";
+  } else {
+    // Remove settled message if exists
+    if (settledMessage) {
+      settledMessage.remove();
+    }
     
-    // Cache the data
-    window.DashboardCache.cacheDashboard(currentUserId, dashboardData);
-    console.log('Dashboard data cached');
+    // Create or update list
+    if (!existingList) {
+      existingList = document.createElement('ul');
+      existingList.style.listStyle = 'none';
+      existingList.style.padding = '0';
+      balancesCard.appendChild(existingList);
+    }
+    
+    // Clear existing items
+    existingList.innerHTML = '';
+    
+    // Add balance items
+    entries.forEach(([key, balanceInfo]) => {
+      const [debtor, creditor] = key.split(':');
+      const isDebtor = debtor === currentUserId;
+      const isCreditor = creditor === currentUserId;
+      
+      let debtorName, creditorName;
+      if (isDebtor) {
+        debtorName = 'You';
+      } else if (userIdMap[debtor]) {
+        debtorName = userIdMap[debtor].username;
+      } else {
+        debtorName = `User (${debtor.slice(-5)})`;
+      }
+      
+      if (isCreditor) {
+        creditorName = 'You';
+      } else if (userIdMap[creditor]) {
+        creditorName = userIdMap[creditor].username;
+      } else {
+        creditorName = `User (${creditor.slice(-5)})`;
+      }
+      
+      const li = document.createElement('li');
+      li.className = isDebtor ? 'debtor-item' : 'creditor-item';
+      li.style.marginBottom = '0.5rem';
+      li.style.padding = '0.5rem';
+      li.style.borderRadius = 'var(--radius-sm)';
+      
+      let displayText;
+      if (isDebtor) {
+        displayText = `You owe <strong>${creditorName}</strong>`;
+      } else if (isCreditor) {
+        displayText = `<strong>${debtorName}</strong> owes you`;
+      } else {
+        displayText = `${debtorName} owes ${creditorName}`;
+      }
+      
+      li.innerHTML = `
+        <span>${displayText}</span>
+        <strong style="float: right;">₹${balanceInfo.amount.toFixed(2)}</strong>
+        <div class="expense-actions">
+          <button class="settle-balance-btn action-btn action-btn-secondary" 
+                  data-debtor="${debtor}" 
+                  data-creditor="${creditor}" 
+                  data-amount="${balanceInfo.amount}"
+                  data-debtor-name="${debtorName}"
+                  data-creditor-name="${creditorName}">
+            Settle
+          </button>
+        </div>
+      `;
+      
+      existingList.appendChild(li);
+    });
+    
+    // Re-attach event listeners for new settle buttons
+    setupSettlementActions();
+  }
+}
+
+function cacheDashboardPayload(payload = {}) {
+  if (!window.DashboardCache || !currentUserId) return;
+  const entry = {
+    summary: payload.summary || payload,
+    groupSummaries: payload.groupSummaries || []
+  };
+  window.DashboardCache.cacheDashboard(currentUserId, entry);
+}
+
+function loadCachedDashboardData() {
+  if (!window.DashboardCache || !currentUserId) return;
+  const cached = window.DashboardCache.getDashboard(currentUserId);
+  if (!cached) return;
+  if (cached.summary) {
+    updateSummaryCards(cached.summary);
+  }
+  if (cached.groupSummaries) {
+    updateGroupSummaryCards(cached.groupSummaries);
+  }
+}
+
+function primeDashboardCacheFromDom() {
+  if (!window.DashboardCache || !currentUserId) return;
+  try {
+    const summary = {
+      personalMonthlyTotal: parseCurrencyValue(document.querySelector('.personal-spending')?.textContent),
+      groupMonthlyTotal: parseCurrencyValue(document.querySelector('.group-spending')?.textContent),
+      totalOwed: parseCurrencyValue(document.querySelector('.total-owed')?.textContent),
+      totalOwedToUser: parseCurrencyValue(document.querySelector('.total-owed-to-you')?.textContent)
+    };
+
+    const groupSummaries = Array.from(document.querySelectorAll('.group-summary-card'))
+      .map((card) => ({
+        groupId: card.getAttribute('data-group-summary-id'),
+        groupName: card.querySelector('.group-summary-name')?.textContent || 'Group',
+        yourShareThisMonth: parseCurrencyValue(card.querySelector('.group-summary-share')?.textContent),
+        totalGroupSpendThisMonth: parseCurrencyValue(card.querySelector('.group-summary-total')?.textContent),
+        youPaidThisMonth: parseCurrencyValue(card.querySelector('.group-summary-paid')?.textContent),
+        memberCount: parseInt(card.querySelector('.group-summary-members')?.textContent?.replace(/[^0-9]/g, ''), 10) || 0
+      }))
+      .filter((entry) => !!entry.groupId);
+
+    cacheDashboardPayload({ summary, groupSummaries });
   } catch (error) {
-    console.log('Caching error:', error);
+    console.log('Dashboard cache prime error:', error);
+  }
+}
+
+async function refreshDashboardSummary() {
+  if (!currentUserId) return;
+  try {
+    const response = await fetch('/api/dashboard/summary?force=true', {
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+    if (!response.ok) {
+      throw new Error('Failed to fetch dashboard summary');
+    }
+    const payload = await response.json();
+    if (!payload || !payload.summary) {
+      return;
+    }
+    updateSummaryCards(payload.summary);
+    if (payload.groupSummaries) {
+      updateGroupSummaryCards(payload.groupSummaries);
+    }
+    if (payload.netBalances && payload.userIdMap) {
+      updateBalancesSection(payload.netBalances, payload.userIdMap);
+    }
+    cacheDashboardPayload(payload);
+  } catch (error) {
+    console.error('Dashboard summary fetch error:', error);
+    loadCachedDashboardData();
   }
 }
 
@@ -639,6 +917,24 @@ function enhanceExpenseForm() {
 
 // Initialize all dashboard functionality
 document.addEventListener('DOMContentLoaded', function() {
+  // Ensure settlement modal is closed on page load
+  const settlementModal = document.getElementById('settlementModal');
+  if (settlementModal) {
+    settlementModal.style.display = 'none';
+    settlementModal.classList.remove('active');
+    
+    // Clear form fields
+    const settlementForm = document.getElementById('settlementForm');
+    if (settlementForm) {
+      settlementForm.reset();
+      // Explicitly clear the hidden ID fields
+      const debtorIdField = document.getElementById('settlementDebtorId');
+      const creditorIdField = document.getElementById('settlementCreditorId');
+      if (debtorIdField) debtorIdField.value = '';
+      if (creditorIdField) creditorIdField.value = '';
+    }
+  }
+  
   setupExpenseActions();
   setupSettlementActions();
   setupGroupDetails();

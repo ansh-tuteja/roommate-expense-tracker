@@ -128,6 +128,26 @@
   color: white;
 }
 
+.group-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.group-summary-card .summary-card-value {
+  font-size: 1.5rem;
+}
+
+.group-summary-meta {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--gray-medium);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
 /* Dashboard Cards */
 .dashboard-card {
   background: white;

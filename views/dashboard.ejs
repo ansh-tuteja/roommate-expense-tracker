@@ -1,6 +1,6 @@
 <div class="dashboard-container">
   <!-- Hidden data for JavaScript -->
-  <div id="dashboard-data" data-user-id="<%= user._id %>" style="display: none;"></div>
+  <div id="dashboard-data" data-user-id="<%= userId %>" style="display: none;"></div>
   
   <div class="dashboard-header">
     <h1 class="dashboard-title">Welcome, <%= user.username %></h1>
@@ -26,7 +26,7 @@
     <% if (totalOwed > 0) { %>
     <div class="summary-card alert">
       <div class="summary-card-title">You Owe</div>
-  <div class="summary-card-value">₹<%= totalOwed.toFixed(2) %></div>
+      <div class="summary-card-value total-owed">₹<%= totalOwed.toFixed(2) %></div>
       <div class="summary-card-subtitle">Across all groups</div>
     </div>
     <% } %>
@@ -34,7 +34,7 @@
     <% if (totalOwedToUser > 0) { %>
     <div class="summary-card success">
       <div class="summary-card-title">You Are Owed</div>
-  <div class="summary-card-value">₹<%= totalOwedToUser.toFixed(2) %></div>
+      <div class="summary-card-value total-owed-to-you">₹<%= totalOwedToUser.toFixed(2) %></div>
       <div class="summary-card-subtitle">Across all groups</div>
     </div>
     <% } %>
@@ -49,6 +49,20 @@
       </div>
     </div>
   </div>
+
+  <% if (groupSummaries && groupSummaries.length > 0) { %>
+  <div class="group-summary-grid">
+    <% groupSummaries.forEach(function(summary) { %>
+      <div class="summary-card group-summary-card" data-group-summary-id="<%= summary.groupId %>">
+        <div class="summary-card-title group-summary-name"><%= summary.groupName %></div>
+        <div class="summary-card-value group-summary-share">
+          ₹<%= summary.yourShareThisMonth.toFixed(2) %>
+        </div>
+        <div class="summary-card-subtitle">Your share this month</div>
+      </div>
+    <% }); %>
+  </div>
+  <% } %>
 
   <div class="dashboard-grid">
     <div class="dashboard-main">
@@ -104,28 +118,24 @@
         </div>
         <div class="general-notifications-list">
           <% generalNotifications.forEach(notification => { %>
+          <% const notificationData = notification.data || {}; %>
           <div class="general-notification-item">
             <div class="notification-content">
               <div class="notification-title"><%= notification.title %></div>
               <div class="notification-message"><%= notification.message %></div>
-              <% if (notification.data.rejectionReason) { %>
-                <div class="rejection-reason">Reason: <%= notification.data.rejectionReason %></div>
+              <% if (notificationData.rejectionReason) { %>
+                <div class="rejection-reason">Reason: <%= notificationData.rejectionReason %></div>
               <% } %>
               <div class="notification-meta">
                 <span class="group-name">
-                  <%= notification.data.groupId ? notification.data.groupId.groupName : 'Cross-group settlement' %>
+                  <%= notificationData.groupId ? notificationData.groupId.groupName : 'Cross-group settlement' %>
                 </span>
-                <span class="time"><%= notification.timeAgo %></span>
+                <span class="time"><%= notification.timeAgo || '' %></span>
               </div>
             </div>
             <div class="notification-actions">
               <% if (notification.type === 'settlement_rejected') { %>
-                <button class="action-btn action-btn-primary settle-again-btn" 
-                        data-notification-id="<%= notification._id %>"
-                        data-amount="<%= notification.data.amount %>"
-                        data-group-id="<%= notification.data.groupId %>">
-                  🔄 Settle Again
-                </button>
+                
               <% } %>
               <button class="action-btn action-btn-secondary close-notification-btn" 
                       data-notification-id="<%= notification._id %>">
@@ -243,7 +253,7 @@
               </tr>
             </thead>
             <tbody>
-              <% for(const exp of groupExpenses.slice(0, 10)) { %>
+          <% for(const exp of groupExpenses.slice(0, 10)) { %>
                 <tr data-expense-id="<%= exp._id %>">
                   <td><%= exp.description %></td>
                   <td><%= exp.groupId ? exp.groupId.groupName : 'Unknown' %></td>
@@ -258,7 +268,7 @@
                         <button class="edit-expense-btn action-icon" title="Edit" data-id="<%= exp._id %>">✏️</button>
                         <button class="delete-expense-btn action-icon" title="Delete" data-id="<%= exp._id %>">🗑️</button>
                       <% } %>
-                      <% if (exp.isSettlement && exp.status === 'pending' && exp.splitAmong.includes(userId)) { %>
+                      <% if (exp.isSettlement && exp.status === 'pending' && exp.splitAmong && exp.splitAmong.some(function(id) { return id.toString() === userId; })) { %>
                         <button class="verify-settlement-btn action-icon" title="Verify Settlement" data-id="<%= exp._id %>">✓</button>
                       <% } %>
                     </div>
@@ -291,9 +301,10 @@
           <% } %>
           
           <% for(const group of groups) { %>
-            <div class="group-card" data-members="<%= group.members.map(m => {
-                  const memberInfo = userIdMap[m.toString()];
-                  return memberInfo ? `${memberInfo.id}:${memberInfo.username}` : '';
+            <div class="group-card" data-members="<%= group.members.map(function(m) {
+                  var memberId = (m && m._id) ? m._id.toString() : m.toString();
+                  var memberInfo = userIdMap[memberId];
+                  return memberInfo ? (memberInfo.id + ':' + memberInfo.username) : '';
                 }).filter(Boolean).join('|') %>">
               <div class="group-card-header">
                 <div class="group-name"><%= group.groupName %></div>
@@ -452,7 +463,7 @@
               <option value="" disabled>Select members to split with</option>
               <!-- Will be populated dynamically based on selected group -->
             </select>
-            <input type="hidden" name="splitAmong" id="splitAmongHidden">
+            <input type="hidden" name="splitAmong" id="splitAmongHidden" value="">
             <div class="form-hint">All group members are included by default. Hold Ctrl/Cmd key to select multiple members. Click again to deselect.</div>
           </div>
         </div>
@@ -636,7 +647,16 @@
     }
     
     if (submitBtn && form) {
-      submitBtn.addEventListener('click', () => {
+      submitBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        // Update hidden splitAmong input before submission
+        const memberSelect = document.getElementById('splitAmong');
+        const hiddenInput = document.getElementById('splitAmongHidden');
+        if (memberSelect && hiddenInput) {
+          const selectedOptions = Array.from(memberSelect.selectedOptions);
+          const selectedIds = selectedOptions.map(opt => opt.value).filter(Boolean);
+          hiddenInput.value = selectedIds.join(',');
+        }
         form.submit();
       });
     }
@@ -717,14 +737,23 @@
   }
   
   function updateHiddenSplitInput() {
+    if (!memberSelect || !hiddenInput) return;
     const selectedOptions = Array.from(memberSelect.selectedOptions);
-    const selectedIds = selectedOptions.map(opt => opt.value);
+    const selectedIds = selectedOptions.map(opt => opt.value).filter(Boolean);
     hiddenInput.value = selectedIds.join(',');
   }
   
   // Initialize with blank hidden input
   if (hiddenInput) {
     hiddenInput.value = '';
+  }
+  
+  // Ensure hidden input is updated before form submission
+  const expenseForm = document.getElementById('expenseForm');
+  if (expenseForm) {
+    expenseForm.addEventListener('submit', function(e) {
+      updateHiddenSplitInput();
+    });
   }
 </script>
 

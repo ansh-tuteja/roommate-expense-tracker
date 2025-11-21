@@ -74,49 +74,6 @@
   </div>
   <% } %>
 
-  <!-- Groups and Settlements -->
-  <div class="settlements-main">
-    <div class="section-header">
-      <h3 class="section-title">Settlements by Group</h3>
-      <p class="section-subtitle">Click on any group to view detailed settlements</p>
-    </div>
-
-    <div class="groups-grid">
-      <% groups.forEach(group => { %>
-      <div class="group-card" data-group-id="<%= group._id %>">
-        <div class="group-header">
-          <div class="group-info">
-            <h4 class="group-name"><%= group.groupName %></h4>
-            <p class="group-members"><%= group.members.length %> members</p>
-          </div>
-          <div class="group-stats">
-            <% const groupSummary = group.settlementSummary || { pending: { count: 0 }, completed: { count: 0 }, rejected: { count: 0 } }; %>
-            <span class="stat pending">
-              <span class="count"><%= groupSummary.pending.count %></span> pending
-            </span>
-            <span class="stat completed">
-              <span class="count"><%= groupSummary.completed.count %></span> done
-            </span>
-          </div>
-        </div>
-        
-        <div class="group-settlements collapsed" id="settlements-<%= group._id %>">
-          <!-- Settlements will be loaded dynamically -->
-          <div class="loading-settlements">
-            <div class="loading-spinner"></div>
-            <p>Loading settlements...</p>
-          </div>
-        </div>
-        
-        <button class="toggle-settlements-btn" data-group-id="<%= group._id %>">
-          <span class="toggle-text">View Settlements</span>
-          <span class="toggle-icon">▼</span>
-        </button>
-      </div>
-      <% }); %>
-    </div>
-  </div>
-
   <!-- Settlement History -->
   <div class="settlements-history">
     <div class="section-header">

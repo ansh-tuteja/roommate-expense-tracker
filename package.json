@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "dev": "nodemon server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "test:dashboard": "node test-dashboard-crud.js"
   },
   "keywords": [],
   "author": "",
@@ -29,6 +30,7 @@
     "winston": "^3.14.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.2"
+    "nodemon": "^3.1.2",
+    "supertest": "^7.1.4"
   }
 }

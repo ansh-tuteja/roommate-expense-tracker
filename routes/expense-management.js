@@ -90,14 +90,13 @@ app.delete('/expenses/:id', requireAuth, asyncHandler(async (req, res) => {
   console.log('Expense deleted from database');
   
   // Invalidate cache for affected users
-  invalidateUserCache(expense.paidBy);
-  if (!expense.isPersonal && expense.splitAmong && expense.splitAmong.length > 0) {
-    for (const userId of expense.splitAmong) {
-      invalidateUserCache(userId);
-    }
+  const affectedUserIds = new Set([expense.paidBy.toString()]);
+  if (!expense.isPersonal && Array.isArray(expense.splitAmong)) {
+    expense.splitAmong.forEach((userId) => affectedUserIds.add(userId.toString()));
   }
+  await Promise.all(Array.from(affectedUserIds).map((id) => invalidateUserCache(id)));
   if (expense.groupId) {
-    invalidateGroupCache(expense.groupId);
+    await invalidateGroupCache(expense.groupId.toString());
   }
   
   console.log('=== END EXPENSE DELETION DEBUG ===\n');

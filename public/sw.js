@@ -2,7 +2,6 @@
 const CACHE_NAME = 'expensehub-v1';
 const CACHE_URLS = [
   '/',
-  '/dashboard',
   '/css/style.css',
   '/css/dashboard.css',
   '/css/profile.css',
@@ -57,6 +56,30 @@ self.addEventListener('fetch', event => {
     return;
   }
   
+  // Always go to network first for HTML navigation (dynamic dashboards, etc.)
+  const isNavigationRequest =
+    event.request.mode === 'navigate' ||
+    (event.request.headers.get('accept') || '').includes('text/html');
+
+  if (isNavigationRequest) {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          if (!response || response.status !== 200 || response.type !== 'basic') {
+            return response;
+          }
+          // Optionally cache homepage for offline fallback
+          if (event.request.url.endsWith('/')) {
+            const responseToCache = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseToCache));
+          }
+          return response;
+        })
+        .catch(() => caches.match('/') || Response.error())
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request)
       .then(response => {

@@ -87,10 +87,24 @@
 
 <!-- Server-side data stored in data attributes -->
 <% 
+  // Safely extract IDs and handle both populated and unpopulated references
+  const getCurrentUserId = () => {
+    if (!expense || !expense.paidBy) return '';
+    return typeof expense.paidBy === 'object' ? expense.paidBy._id.toString() : expense.paidBy.toString();
+  };
+  
+  const getPreviousSelections = () => {
+    if (!expense || !expense.splitAmong || !Array.isArray(expense.splitAmong)) return [];
+    return expense.splitAmong.map(id => {
+      if (!id) return '';
+      return typeof id === 'object' ? id._id.toString() : id.toString();
+    }).filter(id => id); // Remove empty strings
+  };
+  
   const clientData = {
-    currentUserId: expense && expense.paidBy ? expense.paidBy : "",
+    currentUserId: getCurrentUserId(),
     currentUserName: user ? user.username : "",
-    previousSelections: expense && expense.splitAmong ? expense.splitAmong.map(id => id.toString()) : []
+    previousSelections: getPreviousSelections()
   };
 %>
 <div id="server-data" 
@@ -103,10 +117,23 @@
   // Client-side JavaScript
   function getServerData() {
     const dataElement = document.getElementById('server-data');
+    let previousSelections = [];
+    
+    try {
+      const selectionsData = dataElement.dataset.previousSelections;
+      if (selectionsData && selectionsData.trim() !== '') {
+        previousSelections = JSON.parse(selectionsData);
+      }
+    } catch (e) {
+      console.error('Error parsing previous selections:', e);
+      console.log('Raw data:', dataElement.dataset.previousSelections);
+      previousSelections = [];
+    }
+    
     return {
       currentUserId: dataElement.dataset.currentUserId || '',
       currentUserName: dataElement.dataset.currentUserName || '',
-      previousSelections: JSON.parse(dataElement.dataset.previousSelections || '[]')
+      previousSelections: previousSelections
     };
   }
   
@@ -148,12 +175,26 @@
       return;
     }
     
+    // Save current selections before updating
+    const currentSelections = Array.from(splitAmongSelect.selectedOptions).map(opt => opt.value);
+    
     try {
+      console.log('Fetching members for group:', groupSelect.value);
       const response = await fetch(`/api/groups/${groupSelect.value}/members?includeCurrentUser=true`);
+      
+      console.log('Response status:', response.status);
+      console.log('Response ok:', response.ok);
       
       if (response.ok) {
         const data = await response.json();
+        console.log('Members data received:', data);
         const members = data.members;
+        
+        if (!members || members.length === 0) {
+          console.warn('No members returned from API');
+          splitAmongSelect.innerHTML = '<option value="">No members found</option>';
+          return;
+        }
         
         // Clear current options
         splitAmongSelect.innerHTML = '';
@@ -171,10 +212,11 @@
           splitAmongSelect.appendChild(option);
         });
         
-        // Restore previous selections if any
-        if (serverData.previousSelections.length > 0) {
+        // Restore previous selections if any (prioritize current selections over saved ones)
+        const selectionsToRestore = currentSelections.length > 0 ? currentSelections : serverData.previousSelections;
+        if (selectionsToRestore.length > 0) {
           Array.from(splitAmongSelect.options).forEach(option => {
-            if (serverData.previousSelections.includes(option.value)) {
+            if (selectionsToRestore.includes(option.value)) {
               option.selected = true;
             }
           });
@@ -188,10 +230,16 @@
           });
         }
       } else {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('API error response:', errorData);
+        console.error('Error details:', errorData.error, errorData.details);
         splitAmongSelect.innerHTML = '<option value="">Error loading members</option>';
       }
     } catch (error) {
       console.error('Error loading group members:', error);
+      console.error('Error type:', error.name);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
       splitAmongSelect.innerHTML = '<option value="">Error loading members</option>';
     }
   }

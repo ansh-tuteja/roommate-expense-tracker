@@ -403,8 +403,7 @@ window.ExpenseHubCache = new ExpenseHubCache();
 window.DashboardCache = new DashboardCache();
 window.OfflineStorage = new OfflineStorage();
 
-// Register service worker (temporarily disabled for testing)
-/*
+// Register service worker
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js')
@@ -416,14 +415,15 @@ if ('serviceWorker' in navigator) {
       });
   });
 }
-*/
 
-// Online/offline handling (temporarily disabled for testing)
-/*
+// Online/offline handling
 window.addEventListener('online', () => {
   console.log('ExpenseHub: Back online - syncing data');
-  // Trigger sync
-  if ('serviceWorker' in navigator && 'sync' in window.ServiceWorkerRegistration.prototype) {
+  if (
+    'serviceWorker' in navigator &&
+    window.ServiceWorkerRegistration &&
+    'sync' in window.ServiceWorkerRegistration.prototype
+  ) {
     navigator.serviceWorker.ready.then(registration => {
       registration.sync.register('expense-sync');
     });
@@ -433,4 +433,3 @@ window.addEventListener('online', () => {
 window.addEventListener('offline', () => {
   console.log('ExpenseHub: Gone offline - enabling offline mode');
 });
-*/

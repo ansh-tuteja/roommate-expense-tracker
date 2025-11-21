@@ -147,24 +147,45 @@ const validationRules = {
   expense: (req, res, next) => {
     const { description, amount, category, groupId } = req.body;
     
+    // Check if this is an AJAX request
+    const isAjax = req.xhr || 
+                   (req.headers.accept && req.headers.accept.indexOf('json') > -1) || 
+                   req.headers['x-requested-with'] === 'XMLHttpRequest';
+    
     if (!validateDescription(description)) {
-      return res.status(400).json({ 
-        error: 'Description is required and must be 1-200 characters' 
-      });
+      if (isAjax) {
+        return res.status(400).json({ 
+          error: 'Description is required and must be 1-200 characters' 
+        });
+      }
+      req.session.error = 'Description is required and must be 1-200 characters';
+      return res.redirect('back');
     }
     
     if (!validateAmount(amount)) {
-      return res.status(400).json({ 
-        error: 'Amount must be a positive number up to 1,000,000' 
-      });
+      if (isAjax) {
+        return res.status(400).json({ 
+          error: 'Amount must be a positive number up to 1,000,000' 
+        });
+      }
+      req.session.error = 'Amount must be a positive number up to 1,000,000';
+      return res.redirect('back');
     }
     
     if (groupId && !validateObjectId(groupId)) {
-      return res.status(400).json({ error: 'Invalid group ID format' });
+      if (isAjax) {
+        return res.status(400).json({ error: 'Invalid group ID format' });
+      }
+      req.session.error = 'Invalid group ID format';
+      return res.redirect('back');
     }
     
     if (category && category.length > 50) {
-      return res.status(400).json({ error: 'Category must be less than 50 characters' });
+      if (isAjax) {
+        return res.status(400).json({ error: 'Category must be less than 50 characters' });
+      }
+      req.session.error = 'Category must be less than 50 characters';
+      return res.redirect('back');
     }
     
     // Sanitize inputs
@@ -190,20 +211,36 @@ const validationRules = {
   settlement: (req, res, next) => {
     const { creditorId, amount, groupId } = req.body;
     
+    console.log('=== SETTLEMENT VALIDATION ===');
+    console.log('Request body:', req.body);
+    console.log('creditorId:', creditorId);
+    console.log('amount:', amount);
+    console.log('groupId:', groupId);
+    console.log('creditorId type:', typeof creditorId);
+    console.log('creditorId is valid ObjectId:', validateObjectId(creditorId));
+    
     if (!validateObjectId(creditorId)) {
+      console.log('VALIDATION FAILED: Invalid creditor ID format');
+      console.log('=== END SETTLEMENT VALIDATION ===\n');
       return res.status(400).json({ error: 'Invalid creditor ID format' });
     }
     
     if (!validateAmount(amount)) {
+      console.log('VALIDATION FAILED: Invalid amount');
+      console.log('=== END SETTLEMENT VALIDATION ===\n');
       return res.status(400).json({ 
         error: 'Settlement amount must be a positive number up to 1,000,000' 
       });
     }
     
     if (groupId && !validateObjectId(groupId)) {
+      console.log('VALIDATION FAILED: Invalid group ID format');
+      console.log('=== END SETTLEMENT VALIDATION ===\n');
       return res.status(400).json({ error: 'Invalid group ID format' });
     }
     
+    console.log('VALIDATION PASSED');
+    console.log('=== END SETTLEMENT VALIDATION ===\n');
     next();
   },
   

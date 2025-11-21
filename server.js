@@ -9,7 +9,8 @@ const fs = require('fs');
 const bcrypt = require('bcrypt');
 const expressLayouts = require('express-ejs-layouts');
 const methodOverride = require('method-override');
-const Redis = require('ioredis');
+const { buildDashboardPayload } = require('./services/dashboard');
+const redis = require('./lib/redis');
 
 // Import middleware before using them
 const { validationRules } = require('./middleware/validation');
@@ -19,23 +20,91 @@ const { dashboardCache, invalidateUserCache, invalidateGroupCache } = require('.
 
 const app = express();
 
-// Redis configuration
-const redisConfig = process.env.REDIS_URL ? 
-  process.env.REDIS_URL : 
-  {
-    host: process.env.REDIS_HOST || 'localhost',
-    port: process.env.REDIS_PORT || 6379,
-    password: process.env.REDIS_PASSWORD,
-    username: process.env.REDIS_USERNAME,
-    retryDelayOnFailover: 100,
-    enableReadyCheck: false,
-    maxRetriesPerRequest: null,
-    connectTimeout: 10000,
-    commandTimeout: 5000,
-    family: 4 // Force IPv4
-  };
+// Redis client is initialized once in lib/redis.js and shared everywhere
 
-const redis = new Redis(redisConfig);
+// Login tracking + lockout configuration
+const LOGIN_COUNT_HASH_KEY = 'expensehub:login:counts';
+const LOGIN_FAIL_KEY_PREFIX = 'expensehub:login:fail:';
+const LOGIN_LOCK_KEY_PREFIX = 'expensehub:login:lock:';
+const MAX_FAILED_LOGIN_ATTEMPTS = 3;
+const LOCK_DURATION_SECONDS = 30 * 60; // 30 minutes
+
+const normalizeLoginIdentifier = (email = '') => email.trim().toLowerCase();
+const buildFailedKey = (identifier) => `${LOGIN_FAIL_KEY_PREFIX}${identifier}`;
+const buildLockKey = (identifier) => `${LOGIN_LOCK_KEY_PREFIX}${identifier}`;
+
+const incrementSuccessfulLogin = async (userId, email) => {
+  if (!redis || !userId) return;
+
+  try {
+    const field = userId.toString();
+    let previousCount = 0;
+    const existing = await redis.hget(LOGIN_COUNT_HASH_KEY, field);
+    if (existing) {
+      try {
+        const parsed = JSON.parse(existing);
+        previousCount = parsed?.count || 0;
+      } catch (err) {
+        console.log('Login success parse error:', err);
+      }
+    }
+
+    const payload = {
+      email,
+      count: previousCount + 1,
+      lastLoginAt: new Date().toISOString()
+    };
+
+    await redis.hset(LOGIN_COUNT_HASH_KEY, field, JSON.stringify(payload));
+  } catch (err) {
+    console.log('Login success tracking error:', err);
+  }
+};
+
+const recordFailedAttempt = async (identifier) => {
+  if (!redis || !identifier) {
+    return { attempts: 1, locked: false, ttl: 0 };
+  }
+
+  try {
+    const failedKey = buildFailedKey(identifier);
+    const attempts = await redis.incr(failedKey);
+    await redis.expire(failedKey, LOCK_DURATION_SECONDS);
+
+    if (attempts >= MAX_FAILED_LOGIN_ATTEMPTS) {
+      await redis.set(buildLockKey(identifier), 'locked', 'EX', LOCK_DURATION_SECONDS);
+      await redis.del(failedKey);
+      return { attempts, locked: true, ttl: LOCK_DURATION_SECONDS };
+    }
+
+    const ttl = await redis.ttl(failedKey);
+    return { attempts, locked: false, ttl };
+  } catch (err) {
+    console.log('Login failure tracking error:', err);
+    return { attempts: 1, locked: false, ttl: 0 };
+  }
+};
+
+const getLockTTL = async (identifier) => {
+  if (!redis || !identifier) return -2;
+
+  try {
+    return await redis.ttl(buildLockKey(identifier));
+  } catch (err) {
+    console.log('Lock TTL fetch error:', err);
+    return -2;
+  }
+};
+
+const clearLoginGuards = async (identifier) => {
+  if (!redis || !identifier) return;
+
+  try {
+    await redis.del(buildFailedKey(identifier), buildLockKey(identifier));
+  } catch (err) {
+    console.log('Login guard cleanup error:', err);
+  }
+};
 
 // Redis connection handling
 redis.on('connect', () => {
@@ -45,9 +114,6 @@ redis.on('connect', () => {
 redis.on('error', (err) => {
   console.log('Redis error:', err);
 });
-
-// Export redis for cache middleware
-module.exports = { redis };
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/expensehub';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'changeme';
@@ -178,46 +244,60 @@ app.post('/register', authLimiter, validationRules.register, asyncHandler(async 
 }));
 
 app.post('/login', authLimiter, validationRules.login, asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
-  const user = await User.findOne({ email });
-  
+  const emailInput = (req.body.email || '').trim();
+  const { password } = req.body;
+  const normalizedIdentifier = normalizeLoginIdentifier(emailInput);
   const isAjax = req.xhr || 
                  req.headers.accept.indexOf('json') > -1 || 
                  req.headers['x-requested-with'] === 'XMLHttpRequest';
-  
-  if (!user) {
+
+  const respondWithError = (statusCode, message) => {
     if (isAjax) {
-      return res.status(400).json({ error: 'Invalid email or password' });
+      return res.status(statusCode).json({ error: message });
     }
-    return res.status(400).send('Invalid credentials');
+    return res.status(statusCode).send(message);
+  };
+
+  const lockTtl = await getLockTTL(normalizedIdentifier);
+  if (lockTtl && lockTtl > 0) {
+    const minutes = Math.ceil(lockTtl / 60);
+    return respondWithError(423, `Account locked for ${minutes} minute(s) due to multiple failed logins. Please try again later.`);
+  }
+
+  const user = await User.findOne({ email: emailInput });
+  if (!user) {
+    await recordFailedAttempt(normalizedIdentifier);
+    return respondWithError(400, 'Invalid email or password');
   }
   
   const ok = await bcrypt.compare(password, user.password);
   if (!ok) {
-    if (isAjax) {
-      return res.status(400).json({ error: 'Invalid email or password' });
+    const { attempts, locked } = await recordFailedAttempt(normalizedIdentifier);
+    if (locked) {
+      return respondWithError(423, 'Account locked for 30 minutes due to repeated failed logins.');
     }
-    return res.status(400).send('Invalid credentials');
+    const remaining = Math.max(MAX_FAILED_LOGIN_ATTEMPTS - attempts, 0);
+    const errorMsg = remaining > 0
+      ? `Invalid email or password. ${remaining} attempt(s) remaining before lockout.`
+      : 'Invalid email or password.';
+    return respondWithError(400, errorMsg);
   }
+
+  await clearLoginGuards(normalizedIdentifier);
+  await incrementSuccessfulLogin(user._id, user.email);
   
   // Regenerate session to prevent session fixation
   req.session.regenerate((err) => {
     if (err) {
       console.error("Session regeneration error:", err);
-      if (isAjax) {
-        return res.status(500).json({ error: 'Login failed. Please try again.' });
-      }
-      return res.status(500).send('Login failed');
+      return respondWithError(500, 'Login failed. Please try again.');
     }
     
     req.session.user = { id: user._id.toString(), username: user.username, email: user.email };
     req.session.save((err) => {
       if (err) {
         console.error("Session save error:", err);
-        if (isAjax) {
-          return res.status(500).json({ error: 'Login failed. Please try again.' });
-        }
-        return res.status(500).send('Login failed');
+        return respondWithError(500, 'Login failed. Please try again.');
       }
       
       if (isAjax) {
@@ -407,6 +487,9 @@ app.post('/groups/join', requireAuth, async (req, res) => {
     await Group.findByIdAndUpdate(groupId, { $addToSet: { members: req.session.user.id } });
     await User.findByIdAndUpdate(req.session.user.id, { $addToSet: { groups: group._id } });
     
+    // Invalidate cache for the current user who just joined
+    invalidateUserCache(req.session.user.id);
+    
     res.redirect('/dashboard');
   } catch (err) {
     console.error(err);
@@ -423,6 +506,10 @@ app.post('/groups/invite', requireAuth, async (req, res) => {
     }
     await Group.findByIdAndUpdate(groupId, { $addToSet: { members: userId } });
     await User.findByIdAndUpdate(userId, { $addToSet: { groups: group._id } });
+    
+    // Invalidate cache for the updated group
+    invalidateGroupCache(groupId);
+
     res.redirect('/dashboard');
   } catch (err) {
     console.error(err);
@@ -431,13 +518,15 @@ app.post('/groups/invite', requireAuth, async (req, res) => {
 });
 
 // API endpoint to get group details
+// NOTE: Shape of this response is tightly coupled to `/public/js/dashboard.js`
+// which expects `group` and `recentExpenses` with `paidByName` field.
 app.get('/api/groups/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { limit = 10 } = req.query;
     
     // Get group with members populated
-    const group = await Group.findById(id).populate('members', 'username email');
+    const group = await Group.findById(id).populate('members', 'username email').lean();
     
     if (!group) {
       return res.status(404).json({ error: 'Group not found' });
@@ -449,13 +538,22 @@ app.get('/api/groups/:id', requireAuth, async (req, res) => {
     }
     
     // Get group expenses with optional limit
-    const expenses = await Expense.find({ groupId: id })
-                                .populate('paidBy', 'username')
-                                .sort({ createdAt: -1 })
-                                .limit(parseInt(limit))
-                                .lean();
+    const rawExpenses = await Expense.find({ groupId: id })
+      .populate('paidBy', 'username')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit, 10))
+      .lean();
+
+    // Normalise into the structure the frontend expects
+    const recentExpenses = rawExpenses.map(exp => ({
+      _id: exp._id,
+      description: exp.description,
+      amount: exp.amount,
+      paidByName: exp.paidBy && exp.paidBy.username ? exp.paidBy.username : 'Unknown',
+      createdAt: exp.createdAt
+    }));
     
-    res.json({ success: true, group, expenses });
+    res.json({ success: true, group, recentExpenses });
   } catch (err) {
     console.error('Get group details error:', err);
     res.status(500).json({ error: 'Failed to get group details' });
@@ -469,14 +567,23 @@ app.get('/api/groups/:id/members', requireAuth, async (req, res) => {
     const currentUserId = req.session.user.id;
     const includeCurrentUser = req.query.includeCurrentUser === 'true';
     
+    console.log('Fetching members for group:', id);
+    console.log('Include current user:', includeCurrentUser);
+    console.log('Current user ID:', currentUserId);
+    
     const group = await Group.findById(id).populate('members', 'username email');
     
     if (!group) {
+      console.log('Group not found:', id);
       return res.status(404).json({ error: 'Group not found' });
     }
     
+    console.log('Group found:', group.groupName);
+    console.log('Group members count:', group.members.length);
+    
     // Check if user is a member of this group
     if (!group.members.some(member => member._id.toString() === currentUserId)) {
+      console.log('User not a member of group');
       return res.status(403).json({ error: 'You are not a member of this group' });
     }
     
@@ -489,6 +596,8 @@ app.get('/api/groups/:id/members', requireAuth, async (req, res) => {
       membersToReturn = group.members.filter(member => member._id.toString() !== currentUserId);
     }
     
+    console.log('Returning', membersToReturn.length, 'members');
+    
     res.json({ 
       success: true, 
       members: membersToReturn,
@@ -496,7 +605,9 @@ app.get('/api/groups/:id/members', requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('Get group members error:', err);
-    res.status(500).json({ error: 'Failed to get group members' });
+    console.error('Error details:', err.message);
+    console.error('Stack trace:', err.stack);
+    res.status(500).json({ error: 'Failed to get group members', details: err.message });
   }
 });
 
@@ -675,6 +786,7 @@ app.get('/settlements', requireAuth, asyncHandler(async (req, res) => {
         const groupSummary = await Settlement.aggregate([
           {
             $match: {
+              // Only settlements explicitly created within this group
               groupId: group._id,
               $or: [
                 { payerId: new mongoose.Types.ObjectId(userId) },
@@ -724,12 +836,16 @@ app.get('/api/settlements/group/:groupId', requireAuth, asyncHandler(async (req,
   
   // Verify user is member of the group
   const group = await Group.findById(groupId);
-  if (!group || !group.members.includes(userId)) {
+  if (
+    !group ||
+    !group.members.some(memberId => memberId.toString() === userId)
+  ) {
     return res.status(403).json({ error: 'Access denied' });
   }
   
+  // Only fetch settlements explicitly created within this group
   const settlements = await Settlement.find({
-    groupId,
+    groupId: groupId,  // Must have this specific groupId (not null)
     $or: [
       { payerId: userId },
       { debtorId: userId }
@@ -740,13 +856,57 @@ app.get('/api/settlements/group/:groupId', requireAuth, asyncHandler(async (req,
   .populate('groupId', 'groupName')
   .sort({ createdAt: -1 });
   
-  res.json({ settlements });
+  // Add time ago and status class metadata for frontend
+  const settlementsWithMeta = settlements.map(settlement => {
+    const now = new Date();
+    const createdAt = new Date(settlement.createdAt);
+    const diffMs = now - createdAt;
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    let timeAgo;
+    if (diffMins < 60) {
+      timeAgo = `${diffMins} mins ago`;
+    } else if (diffHours < 24) {
+      timeAgo = `${diffHours} hours ago`;
+    } else {
+      timeAgo = `${diffDays} days ago`;
+    }
+
+    let statusClass;
+    switch (settlement.status) {
+      case 'completed':
+        statusClass = 'status-completed';
+        break;
+      case 'pending':
+        statusClass = 'status-pending';
+        break;
+      case 'rejected':
+        statusClass = 'status-rejected';
+        break;
+      default:
+        statusClass = 'status-unknown';
+    }
+
+    return {
+      ...settlement.toObject(),
+      timeAgo,
+      statusClass
+    };
+  });
+  
+  res.json({ settlements: settlementsWithMeta });
 }));
 
 // API route to get settlement history
 app.get('/api/settlements/history', requireAuth, asyncHandler(async (req, res) => {
   const userId = req.session.user.id;
   const { status = 'all' } = req.query;
+  
+  console.log('=== SETTLEMENT HISTORY REQUEST ===');
+  console.log('User ID:', userId);
+  console.log('Status filter:', status);
   
   const matchQuery = {
     $or: [
@@ -765,6 +925,22 @@ app.get('/api/settlements/history', requireAuth, asyncHandler(async (req, res) =
     .populate('groupId', 'groupName')
     .sort({ createdAt: -1 })
     .limit(50);
+  
+  console.log('Settlements found:', settlements.length);
+  console.log('Settlements by status:', settlements.reduce((acc, s) => {
+    acc[s.status] = (acc[s.status] || 0) + 1;
+    return acc;
+  }, {}));
+  console.log('Settlement details:', settlements.map(s => ({
+    id: s._id.toString(),
+    debtor: s.debtorId?.username || 'unknown',
+    creditor: s.payerId?.username || 'unknown',
+    amount: s.amount,
+    status: s.status,
+    groupId: s.groupId?.toString() || 'cross-group',
+    createdAt: s.createdAt
+  })));
+  console.log('=== END SETTLEMENT HISTORY REQUEST ===\n');
 
   // Add computed fields for frontend
   const settlementsWithMeta = settlements.map(settlement => {
@@ -1034,25 +1210,60 @@ app.get('/api/settlements/notifications/count', requireAuth, asyncHandler(async 
   res.json({ count });
 }));
 
+// TEMPORARY ADMIN ROUTE - DELETE ALL SETTLEMENTS (REMOVE THIS AFTER USE!)
+app.delete('/api/admin/settlements/clear-all', requireAuth, asyncHandler(async (req, res) => {
+  try {
+    console.log('=== CLEARING ALL SETTLEMENTS ===');
+    console.log('User requesting clear:', req.session.user.username);
+    
+    const result = await Settlement.deleteMany({});
+    
+    console.log('Deleted settlements count:', result.deletedCount);
+    console.log('=== SETTLEMENTS CLEARED ===\n');
+    
+    res.json({ 
+      success: true, 
+      message: `${result.deletedCount} settlements deleted`,
+      deletedCount: result.deletedCount 
+    });
+  } catch (error) {
+    console.error('Error clearing settlements:', error);
+    res.status(500).json({ error: 'Failed to clear settlements' });
+  }
+}));
+
 // Legacy settlement route (kept for backward compatibility)
 app.post('/settlements', requireAuth, validationRules.settlement, asyncHandler(async (req, res) => {
   const { creditorId, debtorId, amount, description, groupId } = req.body;
   const currentUserId = req.session.user.id;
   
+  console.log('=== SETTLEMENT CREATION DEBUG ===');
+  console.log('Request body:', req.body);
+  console.log('Current user:', currentUserId);
+  console.log('Creditor:', creditorId);
+  console.log('Debtor:', debtorId);
+  console.log('Amount:', amount);
+  console.log('GroupId:', groupId);
+  
   if (!creditorId || !amount || isNaN(parseFloat(amount))) {
+    console.log('Validation failed: Missing creditorId or invalid amount');
     return res.status(400).json({ error: 'Valid creditor ID and amount are required' });
   }
   
   // Use debtorId if provided, otherwise use current user
   const actualDebtorId = debtorId || currentUserId;
   
+  console.log('Actual debtor ID:', actualDebtorId);
+  
   // Validate that current user is either debtor or creditor
   if (currentUserId !== actualDebtorId && currentUserId !== creditorId) {
+    console.log('Authorization failed: User not involved in settlement');
     return res.status(403).json({ error: 'You can only create settlements that involve you' });
   }
   
   // Validate that debtor and creditor are not the same
   if (actualDebtorId === creditorId) {
+    console.log('Validation failed: Debtor and creditor are the same');
     return res.status(400).json({ error: 'Debtor and creditor cannot be the same person' });
   }
   
@@ -1060,26 +1271,49 @@ app.post('/settlements', requireAuth, validationRules.settlement, asyncHandler(a
   if (groupId) {
     const group = await Group.findById(groupId);
     if (!group) {
+      console.log('Group not found:', groupId);
       return res.status(404).json({ error: 'Group not found' });
     }
     
     const memberIds = group.members.map(m => m.toString());
     if (!memberIds.includes(actualDebtorId) || !memberIds.includes(creditorId)) {
+      console.log('Validation failed: Users not in group');
       return res.status(400).json({ error: 'Both parties must be members of the specified group' });
     }
+    console.log('Group validation passed');
   }
   
   try {
+    console.log('Creating settlement with data:', {
+      description: description || 'Debt Settlement',
+      amount: parseFloat(amount),
+      payerId: creditorId,
+      debtorId: actualDebtorId,
+      groupId: groupId && groupId !== '' ? groupId : null,
+      status: currentUserId === creditorId ? 'completed' : 'pending',
+      settlementMethod: 'cash',
+      notes: description || ''
+    });
+    
     // Create a settlement record using the Settlement model
     const settlement = await Settlement.create({
       description: description || 'Debt Settlement',
       amount: parseFloat(amount),
       payerId: creditorId,  // Who is getting paid
       debtorId: actualDebtorId,  // Who owes the money
-      groupId: groupId || null,
+      groupId: groupId && groupId !== '' ? groupId : null,
       status: currentUserId === creditorId ? 'completed' : 'pending',
       settlementMethod: 'cash',
       notes: description || ''
+    });
+    
+    console.log('Settlement created successfully:', {
+      id: settlement._id.toString(),
+      groupId: settlement.groupId,
+      status: settlement.status,
+      amount: settlement.amount,
+      payerId: settlement.payerId.toString(),
+      debtorId: settlement.debtorId.toString()
     });
     
     // If this is tied to a group, update the group's settlements array if it exists
@@ -1088,11 +1322,18 @@ app.post('/settlements', requireAuth, validationRules.settlement, asyncHandler(a
         groupId, 
         { $addToSet: { settlements: settlement._id } }
       );
+      console.log('Group updated with settlement ID');
     }
+    
+    console.log('=== END SETTLEMENT CREATION DEBUG ===\n');
     
     res.json({ success: true, settlement });
   } catch (error) {
-    console.error('Error creating settlement:', error);
+    console.error('=== SETTLEMENT CREATION ERROR ===');
+    console.error('Error details:', error);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    console.error('=== END SETTLEMENT CREATION ERROR ===\n');
     res.status(500).json({ error: 'Failed to create settlement. Please try again.' });
   }
 }));
@@ -1474,6 +1715,11 @@ app.post('/expenses', requireAuth, validationRules.expense, asyncHandler(async (
     const { description, amount, expenseType, groupId, splitAmong, category } = req.body;
     const isPersonal = expenseType === 'personal';
     
+    // Check if this is an AJAX request
+    const isAjax = req.xhr || 
+                   (req.headers.accept && req.headers.accept.indexOf('json') > -1) || 
+                   req.headers['x-requested-with'] === 'XMLHttpRequest';
+    
     const expenseData = {
       description,
       amount: Number(amount),
@@ -1484,36 +1730,61 @@ app.post('/expenses', requireAuth, validationRules.expense, asyncHandler(async (
     
     if (!isPersonal) {
       if (!groupId) {
-        throw new Error('Group ID required for group expense');
+        const errorMsg = 'Group ID required for group expense';
+        if (isAjax) {
+          return res.status(400).json({ error: errorMsg });
+        }
+        req.session.error = errorMsg;
+        return res.redirect('/dashboard');
       }
       
       // Get the group to access all members
       const group = await Group.findById(groupId).populate('members');
       if (!group) {
-        throw new Error('Group not found');
+        const errorMsg = 'Group not found';
+        if (isAjax) {
+          return res.status(404).json({ error: errorMsg });
+        }
+        req.session.error = errorMsg;
+        return res.redirect('/dashboard');
       }
       
       // Verify user is a member of the group
       const memberIds = group.members.map(m => m._id.toString());
       if (!memberIds.includes(req.session.user.id)) {
-        throw new Error('You must be a member of the group to add expenses');
+        const errorMsg = 'You must be a member of the group to add expenses';
+        if (isAjax) {
+          return res.status(403).json({ error: errorMsg });
+        }
+        req.session.error = errorMsg;
+        return res.redirect('/dashboard');
       }
       
-      // Process split users
+      // Process split users - handle both string (comma-separated) and array (from multi-select)
       let splitUsers = [];
-      if (splitAmong && splitAmong.trim()) {
-        const splitUserIds = splitAmong.split(',').map(id => id.trim()).filter(Boolean);
-        
-        for (const userId of splitUserIds) {
-          if (!/^[0-9a-fA-F]{24}$/.test(userId)) continue;
-          if (!memberIds.includes(userId)) continue;
-          splitUsers.push(userId);
+      if (splitAmong) {
+        let splitUserIds = [];
+        if (Array.isArray(splitAmong)) {
+          // Multi-select form field sends array
+          splitUserIds = splitAmong.filter(Boolean);
+        } else if (typeof splitAmong === 'string' && splitAmong.trim()) {
+          // Comma-separated string
+          splitUserIds = splitAmong.split(',').map(id => id.trim()).filter(Boolean);
         }
         
+        // Validate and filter user IDs
+        for (const userId of splitUserIds) {
+          if (/^[0-9a-fA-F]{24}$/.test(userId) && memberIds.includes(userId)) {
+            splitUsers.push(userId);
+          }
+        }
+        
+        // If no valid users, default to all members
         if (splitUsers.length === 0) {
           splitUsers = memberIds;
         }
       } else {
+        // No split specified, default to all members
         splitUsers = memberIds;
       }
       
@@ -1533,24 +1804,36 @@ app.post('/expenses', requireAuth, validationRules.expense, asyncHandler(async (
     }
     
     // Invalidate cache for affected users
-    invalidateUserCache(req.session.user.id);
-    if (!isPersonal && expenseData.splitAmong && expenseData.splitAmong.length > 0) {
-      for (const userId of expenseData.splitAmong) {
-        invalidateUserCache(userId);
-      }
+    const affectedUserIds = new Set([req.session.user.id]);
+    if (!isPersonal && Array.isArray(expenseData.splitAmong)) {
+      expenseData.splitAmong.forEach((userId) => affectedUserIds.add(userId.toString()));
     }
+    await Promise.all(Array.from(affectedUserIds).map((id) => invalidateUserCache(id.toString())));
     if (groupId) {
-      invalidateGroupCache(groupId);
+      await invalidateGroupCache(groupId.toString());
     }
 
+    if (isAjax) {
+      return res.json({ success: true, expense });
+    }
+    req.session.message = 'Expense added successfully';
     res.redirect('/dashboard');
   } catch (err) {
-    throw err; // Re-throw for asyncHandler to handle
+    console.error('Expense creation error:', err);
+    const isAjax = req.xhr || 
+                   (req.headers.accept && req.headers.accept.indexOf('json') > -1) || 
+                   req.headers['x-requested-with'] === 'XMLHttpRequest';
+    
+    if (isAjax) {
+      return res.status(500).json({ error: err.message || 'Failed to create expense' });
+    }
+    req.session.error = err.message || 'Failed to create expense';
+    res.redirect('/dashboard');
   }
 }));
 
 // Update expense
-app.put('/expenses/:id', requireAuth, async (req, res) => {
+app.put('/expenses/:id', requireAuth, asyncHandler(async (req, res) => {
   try {
     const { id } = req.params;
     const { description, amount, category, expenseType, originalExpenseType, groupId, splitAmong } = req.body;
@@ -1597,7 +1880,11 @@ app.put('/expenses/:id', requireAuth, async (req, res) => {
       resultIsPersonal: isPersonal 
     });
     
-    const updateData = { description, amount, category };
+    const updateData = { description, category };
+    const parsedAmount = Number(amount);
+    if (!Number.isNaN(parsedAmount)) {
+      updateData.amount = parsedAmount;
+    }
     
     // Handle group expense specifics
     if (!isPersonal && groupId) {
@@ -1618,16 +1905,39 @@ app.put('/expenses/:id', requireAuth, async (req, res) => {
         await Group.findByIdAndUpdate(groupId, { $addToSet: { expenses: id } });
       }
       
-      // If splitAmong is specified, use it; otherwise use all group members
-      let splitUsers;
+      const groupMemberIds = group.members.map(member => member.toString());
+      let splitUsers = [];
+
+      // Handle both array (multi-select) and string (comma-separated) formats
       if (splitAmong) {
-        splitUsers = splitAmong.split(',').map(id => id.trim()).filter(Boolean);
-        if (!splitUsers.length) splitUsers = group.members.map(m => m.toString());
-      } else {
-        splitUsers = group.members.map(m => m.toString());
+        let splitUserIds = [];
+        if (Array.isArray(splitAmong)) {
+          // Multi-select form field sends array
+          splitUserIds = splitAmong.filter(Boolean);
+        } else if (typeof splitAmong === 'string' && splitAmong.trim()) {
+          // Comma-separated string
+          splitUserIds = splitAmong.split(',').map(id => id.trim()).filter(Boolean);
+        }
+        
+        // Validate and filter user IDs
+        for (const userId of splitUserIds) {
+          if (/^[0-9a-fA-F]{24}$/.test(userId) && groupMemberIds.includes(userId)) {
+            splitUsers.push(userId);
+          }
+        }
       }
-      
-      updateData.splitAmong = splitUsers;
+
+      // If no valid users, default to all members
+      if (!splitUsers.length) {
+        splitUsers = [...groupMemberIds];
+      }
+
+      // Ensure the payer is included in the split
+      if (!splitUsers.includes(req.session.user.id)) {
+        splitUsers.push(req.session.user.id);
+      }
+
+      updateData.splitAmong = Array.from(new Set(splitUsers));
       updateData.groupId = groupId;
       updateData.isPersonal = false;
     } else {
@@ -1649,6 +1959,19 @@ app.put('/expenses/:id', requireAuth, async (req, res) => {
       groupId: updatedExpense.groupId
     });
     console.log('=== END EXPENSE UPDATE DEBUG ===\n');
+
+    // Invalidate caches for affected users/groups
+    const affectedUserIds = new Set([req.session.user.id]);
+    if (Array.isArray(updatedExpense.splitAmong)) {
+      updatedExpense.splitAmong.forEach(uid => {
+        const idStr = uid.toString();
+        if (idStr) affectedUserIds.add(idStr);
+      });
+    }
+    await Promise.all(Array.from(affectedUserIds).map((id) => invalidateUserCache(id.toString())));
+    if (updatedExpense.groupId) {
+      await invalidateGroupCache(updatedExpense.groupId.toString());
+    }
     
     // Check if the request is an AJAX request or a form submission
     const isAjax = req.xhr || req.headers.accept.indexOf('json') > -1;
@@ -1674,7 +1997,7 @@ app.put('/expenses/:id', requireAuth, async (req, res) => {
       res.redirect('/dashboard');
     }
   }
-});
+}));
 
 // Cache testing route
 app.get('/cache-test', requireAuth, (req, res) => {
@@ -1692,341 +2015,42 @@ app.get('/simple-test', (req, res) => {
 });
 
 app.get('/dashboard', requireAuth, asyncHandler(async (req, res) => {
-  const userId = req.session.user.id;
-    
-    // Get user with groups and populate group members
-    const user = await User.findById(userId).populate({
-      path: 'groups',
-      select: 'groupName members',
-      populate: {
-        path: 'members',
-        select: 'username email'
-      }
-    });
-    if (!user) {
-      return res.status(404).send('User not found');
-    }
+  const data = await buildDashboardPayload(req.session.user.id);
 
-    const balances = {};
-    const groupSummaries = [];
-    
-    // Get all group IDs the user is a member of
-    const userGroupIds = user.groups.map(g => g._id);
-    
-    // Calculate balances for group expenses
-    const groupExpenses = await Expense.find({ 
-      groupId: { $in: userGroupIds },
-      isPersonal: { $ne: true },
-      isSettlement: { $ne: true } // Exclude old-style settlements
-    }).populate('paidBy', 'username');
-    
-    // Process regular expenses to calculate base debts
-    for (const exp of groupExpenses) {
-      const paidById = exp.paidBy._id.toString();
-      const groupMembers = user.groups
-        .find(g => g._id.toString() === exp.groupId.toString())
-        ?.members.map(m => m.toString()) || [];
-      
-      if (!groupMembers.includes(paidById)) continue;
-      
-      // Get split members (default to all group members)
-      const splitUserIds = exp.splitAmong?.length > 0 
-        ? exp.splitAmong.map(id => id.toString()).filter(id => groupMembers.includes(id))
-        : groupMembers;
-      
-      if (splitUserIds.length === 0) continue;
-      
-      const sharePerPerson = exp.amount / splitUserIds.length;
-      
-      // Each split member owes the payer their share (except the payer)
-      for (const uid of splitUserIds) {
-        if (uid === paidById) continue;
-        
-        const debtKey = `${uid}:${paidById}`;
-        balances[debtKey] = (balances[debtKey] || 0) + sharePerPerson;
-      }
-    }
+  res.render('dashboard', {
+    user: req.session.user,
+    userId: req.session.user.id,
+    groups: data.groups,
+    personalExpenses: data.personalExpenses,
+    groupExpenses: data.groupExpenses,
+    netBalances: data.netBalances,
+    groupSummaries: data.groupSummaries,
+    personalMonthlyTotal: data.personalMonthlyTotal,
+    groupMonthlyTotal: data.groupMonthlyTotal,
+    totalOwed: data.totalOwed,
+    totalOwedToUser: data.totalOwedToUser,
+    categories: data.categories,
+    userIdMap: data.userIdMap,
+    settlementNotifications: data.settlementNotifications,
+    generalNotifications: data.generalNotifications
+  });
+}));
 
-    // Apply completed settlements from the new Settlement model
-    const completedSettlements = await Settlement.find({
-      status: 'completed',
-      $or: [
-        { payerId: { $in: [...userGroupIds.map(() => userId), userId] } },
-        { debtorId: { $in: [...userGroupIds.map(() => userId), userId] } }
-      ]
-    });
+app.get('/api/dashboard/summary', requireAuth, asyncHandler(async (req, res) => {
+  const data = await buildDashboardPayload(req.session.user.id);
 
-    for (const settlement of completedSettlements) {
-      const debtKey = `${settlement.debtorId}:${settlement.payerId}`;
-      balances[debtKey] = (balances[debtKey] || 0) - settlement.amount;
-    }
-
-    console.log(`\n=== Settlement Integration Complete ===`);
-    console.log('Applied settlements:', completedSettlements.length);
-    console.log('Final balances:', balances);
-    
-    // Debug: Log expense details for troubleshooting
-    console.log('\n=== Expense Debug Info ===');
-    groupExpenses.forEach(exp => {
-      console.log(`Expense: ${exp.description} - Amount: ${exp.amount} - PaidBy: ${exp.paidBy.username} - SplitAmong: ${exp.splitAmong?.length || 0} people`);
-    });
-
-    // Get user mapping efficiently
-    const allUserIds = new Set();
-    allUserIds.add(userId);
-    
-    // Add user IDs from groups and expenses - with proper handling
-    user.groups.forEach(group => {
-      if (group.members && Array.isArray(group.members)) {
-        group.members.forEach(member => {
-          try {
-            // Handle different member formats: ObjectId, populated object, or string
-            let memberId;
-            if (typeof member === 'object' && member !== null) {
-              if (member._id) {
-                memberId = member._id.toString();
-              } else {
-                memberId = member.toString();
-              }
-            } else {
-              memberId = member.toString();
-            }
-            
-            // Validate it's a proper ObjectId format before adding
-            if (/^[0-9a-fA-F]{24}$/.test(memberId)) {
-              allUserIds.add(memberId);
-            }
-          } catch (error) {
-            console.warn('Error processing member:', member, error.message);
-          }
-        });
-      }
-    });
-    
-    groupExpenses.forEach(exp => {
-      if (exp.paidBy && exp.paidBy._id) allUserIds.add(exp.paidBy._id.toString());
-      if (exp.splitAmong && Array.isArray(exp.splitAmong)) {
-        exp.splitAmong.forEach(id => {
-          const idStr = id.toString();
-          if (/^[0-9a-fA-F]{24}$/.test(idStr)) {
-            allUserIds.add(idStr);
-          }
-        });
-      }
-    });
-    
-    // Fetch all relevant users in one query
-    const allUsers = await User.find(
-      { _id: { $in: Array.from(allUserIds) } }, 
-      { _id: 1, username: 1, email: 1 }
-    );
-    
-    const userIdMap = {};
-    allUsers.forEach(user => {
-      userIdMap[user._id.toString()] = {
-        id: user._id.toString(),
-        username: user.username,
-        email: user.email
-      };
-    });
-    
-    // Calculate net balances efficiently
-    const netBalances = {};
-    
-    for (const key in balances) {
-      const amount = balances[key];
-      
-      if (amount === 0) {
-        continue;
-      }
-      
-      const [debtor, creditor] = key.split(':');
-      const reverseKey = `${creditor}:${debtor}`;
-      const reverseAmount = balances[reverseKey] || 0;
-      
-      const netAmount = amount - reverseAmount;
-      
-      // Only create an entry if we haven't already processed the reverse direction
-      if (netBalances[key] || netBalances[reverseKey]) {
-        continue;
-      }
-      
-      if (netAmount > 0) {
-        // Debtor owes creditor
-        const debtorInfo = userIdMap[debtor] || { 
-          id: debtor, 
-          username: debtor === userId ? 'You' : 'Unknown User',
-          email: '' 
-        };
-        
-        const creditorInfo = userIdMap[creditor] || { 
-          id: creditor, 
-          username: creditor === userId ? 'You' : 'Unknown User',
-          email: '' 
-        };
-        
-        netBalances[key] = { amount: netAmount, debtorInfo, creditorInfo };
-      } else if (netAmount < 0) {
-        // Creditor owes debtor (reverse the relationship)
-        const debtorInfo = userIdMap[creditor] || { 
-          id: creditor, 
-          username: creditor === userId ? 'You' : 'Unknown User',
-          email: '' 
-        };
-        
-        const creditorInfo = userIdMap[debtor] || { 
-          id: debtor, 
-          username: debtor === userId ? 'You' : 'Unknown User',
-          email: '' 
-        };
-        
-        netBalances[reverseKey] = { amount: Math.abs(netAmount), debtorInfo, creditorInfo };
-      }
-    }
-
-    // Get personal and group expenses efficiently
-    const personalExpenses = await Expense.find({ 
-      paidBy: userId,
-      isPersonal: true 
-    }).sort({ createdAt: -1 }).limit(20);
-    
-    const groupExpensesForUser = await Expense.find({ 
-      groupId: { $in: userGroupIds },
-      isPersonal: { $ne: true }
-    })
-    .populate('paidBy', 'username')
-    .populate('groupId', 'groupName')
-    .sort({ createdAt: -1 })
-    .limit(20);
-
-    // Calculate monthly totals
-    const currentDate = new Date();
-    const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-    
-    const personalMonthlyTotal = personalExpenses
-      .filter(exp => new Date(exp.createdAt) >= firstDayOfMonth)
-      .reduce((sum, exp) => sum + exp.amount, 0);
-    
-    // Calculate group monthly total (only expenses user was involved in)
-    const groupMonthlyTotal = groupExpensesForUser
-      .filter(exp => new Date(exp.createdAt) >= firstDayOfMonth)
-      .reduce((sum, exp) => {
-        // Get the group for this expense
-        const group = user.groups.find(g => g._id.toString() === exp.groupId._id.toString());
-        
-        console.log(`\n--- Monthly Calculation Debug ---`);
-        console.log(`Expense: ${exp.description} - ₹${exp.amount}`);
-        console.log(`Group found: ${!!group}, Group ID: ${exp.groupId._id}`);
-        
-        if (!group) {
-          console.log(`❌ No group found for expense`);
-          return sum;
-        }
-        
-        // Get group members, handling both populated and non-populated cases
-        const groupMembers = group.members.map(m => {
-          if (typeof m === 'object' && m._id) {
-            return m._id.toString(); // Populated member object
-          }
-          return m.toString(); // Just the ID
-        });
-        
-        console.log(`Group members: ${groupMembers.length} [${groupMembers.join(', ')}]`);
-        console.log(`Expense splitAmong: ${exp.splitAmong?.length || 0} [${(exp.splitAmong || []).map(id => id.toString()).join(', ')}]`);
-        
-        // Get split members (use all group members if splitAmong is empty, otherwise use intersection)
-        let splitUserIds;
-        if (exp.splitAmong && exp.splitAmong.length > 0) {
-          // Use only the users who are both in splitAmong AND in the group
-          splitUserIds = exp.splitAmong
-            .map(id => id.toString())
-            .filter(id => groupMembers.includes(id));
-        } else {
-          // If no splitAmong specified, use all group members
-          splitUserIds = groupMembers;
-        }
-        
-        console.log(`Final splitUserIds: ${splitUserIds.length} [${splitUserIds.join(', ')}]`);
-        console.log(`Current user ID: ${userId}`);
-        console.log(`User is involved: ${splitUserIds.includes(userId)}`);
-        
-        // Only include if user is involved in this expense
-        if (!splitUserIds.includes(userId)) {
-          console.log(`❌ User not involved - returning sum: ${sum}`);
-          return sum;
-        }
-        
-        // Calculate user's share of this expense
-        const userShare = exp.amount / splitUserIds.length;
-        console.log(`✅ User share: ₹${userShare} (${exp.amount} / ${splitUserIds.length})`);
-        console.log(`New sum: ${sum + userShare}`);
-        
-        return sum + userShare;
-      }, 0);
-      
-    console.log(`\n=== Monthly Total Debug ===`);
-    console.log(`User: ${user.username} (${userId})`);
-    console.log(`Group Monthly Total: ₹${groupMonthlyTotal}`);
-    console.log(`Personal Monthly Total: ₹${personalMonthlyTotal}`);
-    
-    // Calculate owed amounts
-    let totalOwed = 0;
-    let totalOwedToUser = 0;
-    
-    for (const key in netBalances) {
-      const [debtor, creditor] = key.split(':');
-      
-      if (debtor === userId) {
-        totalOwed += netBalances[key].amount;
-      }
-      if (creditor === userId) {
-        totalOwedToUser += netBalances[key].amount;
-      }
-    }
-    
-    // Calculate spending categories
-    const categories = {};
-    personalExpenses.forEach(exp => {
-      const cat = exp.category || 'Other';
-      categories[cat] = (categories[cat] || 0) + exp.amount;
-    });
-
-    // Get pending settlement notifications
-    const settlementNotifications = await Settlement.find({
-      payerId: userId,
-      status: 'pending'
-    })
-    .populate('debtorId', 'username')
-    .populate('groupId', 'groupName')
-    .sort({ createdAt: -1 })
-    .limit(5);
-
-    // Get general notifications (rejections, etc.)
-    const generalNotifications = await Notification.find({ 
-      userId, 
-      isRead: false 
-    })
-    .populate('data.groupId', 'groupName')
-    .sort({ createdAt: -1 })
-    .limit(5);
-
-    res.render('dashboard', {
-      user: req.session.user,
-      userId,
-      groups: user.groups,
-      personalExpenses,
-      groupExpenses: groupExpensesForUser,
-      netBalances,
-      groupSummaries,
-      personalMonthlyTotal,
-      groupMonthlyTotal,
-      totalOwed,
-      totalOwedToUser,
-      categories,
-      userIdMap,
-      settlementNotifications,
-      generalNotifications
-    });
+  res.json({
+    success: true,
+    summary: {
+      personalMonthlyTotal: data.personalMonthlyTotal,
+      groupMonthlyTotal: data.groupMonthlyTotal,
+      totalOwed: data.totalOwed,
+      totalOwedToUser: data.totalOwedToUser
+    },
+    groupSummaries: data.groupSummaries,
+    netBalances: data.netBalances,
+    userIdMap: data.userIdMap
+  });
 }));
 
 // Include expense management routes
@@ -2041,22 +2065,25 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 3000;
 const HTTPS_PORT = process.env.HTTPS_PORT || 3443;
 
-// HTTPS configuration
-try {
-  const httpsOptions = {
-    key: fs.readFileSync(path.join(__dirname, 'certs/server-key.pem')),
-    cert: fs.readFileSync(path.join(__dirname, 'certs/server-cert.pem'))
-  };
-  
-  // Start HTTPS server
-  https.createServer(httpsOptions, app).listen(HTTPS_PORT, () => {
-    console.log(`🔒 ExpenseHub HTTPS running on https://localhost:${HTTPS_PORT}`);
-    console.log(`💡 For trusted HTTPS: Run 'install-certificate.bat' as Administrator`);
-  });
-} catch (error) {
-  console.log('❌ HTTPS certificates not found, running HTTP only');
-  console.log('   Run: npm run generate-certs');
+if (require.main === module) {
+  try {
+    const httpsOptions = {
+      key: fs.readFileSync(path.join(__dirname, 'certs/server-key.pem')),
+      cert: fs.readFileSync(path.join(__dirname, 'certs/server-cert.pem'))
+    };
+    
+    // Start HTTPS server
+    https.createServer(httpsOptions, app).listen(HTTPS_PORT, () => {
+      console.log(`🔒 ExpenseHub HTTPS running on https://localhost:${HTTPS_PORT}`);
+      console.log(`💡 For trusted HTTPS: Run 'install-certificate.bat' as Administrator`);
+    });
+  } catch (error) {
+    console.log('❌ HTTPS certificates not found, running HTTP only');
+    console.log('   Run: npm run generate-certs');
+  }
+
+  // Start HTTP server
+  app.listen(PORT, () => console.log(`ExpenseHub HTTP running on http://localhost:${PORT}`));
 }
 
-// Start HTTP server
-app.listen(PORT, () => console.log(`ExpenseHub HTTP running on http://localhost:${PORT}`));
+module.exports = { app, redis, buildDashboardPayload };

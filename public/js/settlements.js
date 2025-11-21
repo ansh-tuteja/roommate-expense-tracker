@@ -33,13 +33,13 @@ function loadInitialData() {
 function setupNotificationActions() {
   // Accept settlement buttons
   document.querySelectorAll('.accept-settlement-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
+    btn.addEventListener('click', function (event) {
       const settlementId = this.dataset.settlementId;
       const amount = this.dataset.amount;
       const debtor = this.dataset.debtor;
-      
+
       showConfirmation(`Accept settlement of ₹${amount} from ${debtor}?`, () => {
-        acceptSettlement(settlementId);
+        acceptSettlement(settlementId, event.currentTarget);
       });
     });
   });
@@ -110,7 +110,7 @@ async function loadGroupSettlements(groupId) {
 
 // Render group settlements
 function renderGroupSettlements(container, settlements) {
-  if (settlements.length === 0) {
+  if (!settlements || settlements.length === 0) {
     container.innerHTML = `
       <div style="padding: 2rem; text-align: center; color: #7f8c8d;">
         <p>No settlements in this group yet.</p>
@@ -154,7 +154,7 @@ function renderSettlementActions(settlement) {
         <div class="settlement-actions">
           <button class="action-btn action-btn-success accept-settlement" 
                   data-settlement-id="${settlement._id}">Accept</button>
-          <button class="action-btn action-btn-danger reject-settlement" 
+          <button class="action-btn action-btn-danger reject-settlement-btn" 
                   data-settlement-id="${settlement._id}">Reject</button>
         </div>
       `;
@@ -176,14 +176,15 @@ function renderSettlementActions(settlement) {
 function setupSettlementActions(container) {
   // Accept buttons
   container.querySelectorAll('.accept-settlement').forEach(btn => {
-    btn.addEventListener('click', function() {
+    btn.addEventListener('click', function (event) {
       const settlementId = this.dataset.settlementId;
-      acceptSettlement(settlementId);
+      acceptSettlement(settlementId, event.currentTarget);
     });
   });
 
   // Reject buttons
-  container.querySelectorAll('.reject-settlement').forEach(btn => {
+  // Reject settlement buttons
+  container.querySelectorAll('.reject-settlement-btn').forEach(btn => {
     btn.addEventListener('click', function() {
       const settlementId = this.dataset.settlementId;
       showRejectionModal(settlementId);
@@ -200,9 +201,11 @@ function setupSettlementActions(container) {
 }
 
 // Accept settlement
-async function acceptSettlement(settlementId) {
+async function acceptSettlement(settlementId, button) {
   try {
-    showLoadingButton(event.target, 'Accepting...');
+    if (button) {
+      showLoadingButton(button, 'Accepting...');
+    }
     
     const response = await fetch(`/api/settlements/${settlementId}/accept`, {
       method: 'POST',
@@ -213,45 +216,55 @@ async function acceptSettlement(settlementId) {
     
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.message || 'Failed to accept settlement');
+      const message = error.error || error.message || 'Failed to accept settlement';
+      throw new Error(message);
     }
     
     showNotification('Settlement accepted successfully!', 'success');
     
     // Refresh the page to update all data
     setTimeout(() => window.location.reload(), 1000);
-    
   } catch (error) {
     console.error('Error accepting settlement:', error);
     showNotification(error.message || 'Failed to accept settlement', 'error');
-    resetLoadingButton(event.target, 'Accept');
+    if (button) {
+      resetLoadingButton(button, 'Accept');
+    }
   }
 }
 
 // Reject settlement
 async function rejectSettlement(settlementId, reason) {
   try {
+    console.log('Rejecting settlement:', settlementId, 'Reason:', reason);
+    
     const response = await fetch(`/api/settlements/${settlementId}/reject`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ reason })
+      body: JSON.stringify({ reason: reason || 'No reason provided' })
     });
     
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to reject settlement');
+      const error = await response.json().catch(() => ({ error: 'Failed to reject settlement' }));
+      const message = error.error || error.message || 'Failed to reject settlement';
+      throw new Error(message);
     }
+    
+    const result = await response.json();
+    console.log('Settlement rejected successfully:', result);
     
     showNotification('Settlement rejected', 'info');
     
     // Refresh the page to update all data
     setTimeout(() => window.location.reload(), 1000);
     
+    return true;
   } catch (error) {
     console.error('Error rejecting settlement:', error);
     showNotification(error.message || 'Failed to reject settlement', 'error');
+    return false;
   }
 }
 
@@ -294,10 +307,19 @@ async function loadSettlementHistory(status = 'all') {
   try {
     historyContainer.innerHTML = '<div class="loading-settlements"><div class="loading-spinner"></div><p>Loading history...</p></div>';
     
-    const response = await fetch(`/api/settlements/history?status=${status}`);
+    // Add cache busting and force fresh data
+    const timestamp = new Date().getTime();
+    const response = await fetch(`/api/settlements/history?status=${status}&_=${timestamp}`, {
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      }
+    });
+    
     if (!response.ok) throw new Error('Failed to load history');
     
     const data = await response.json();
+    console.log('Settlement history loaded:', data.settlements.length, 'settlements');
     renderSettlementHistory(historyContainer, data.settlements);
   } catch (error) {
     console.error('Error loading settlement history:', error);
@@ -352,12 +374,28 @@ function setupRejectionModal() {
   });
 
   // Confirm rejection
-  confirmBtn?.addEventListener('click', async function() {
+  confirmBtn?.addEventListener('click', async function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
     const settlementId = document.getElementById('rejectionSettlementId').value;
     const reason = document.getElementById('rejectionReason').value;
     
-    await rejectSettlement(settlementId, reason);
-    closeModal('rejectionModal');
+    console.log('Confirm rejection clicked for settlement:', settlementId);
+    
+    // Disable button to prevent double-click
+    this.disabled = true;
+    this.textContent = 'Rejecting...';
+    
+    const success = await rejectSettlement(settlementId, reason);
+    
+    if (success) {
+      closeModal('rejectionModal');
+    } else {
+      // Re-enable button if rejection failed
+      this.disabled = false;
+      this.textContent = 'Reject Settlement';
+    }
   });
 
   // Close on outside click
@@ -448,7 +486,8 @@ function setupNewSettlementModal() {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || 'Failed to send settlement request');
+        const message = error.error || error.message || 'Failed to send settlement request';
+        throw new Error(message);
       }
 
       showNotification('Settlement request sent successfully!', 'success');
@@ -575,7 +614,8 @@ function cancelSettlement(settlementId) {
       
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || 'Failed to cancel settlement');
+        const message = error.error || error.message || 'Failed to cancel settlement';
+        throw new Error(message);
       }
       
       showNotification('Settlement request cancelled', 'info');

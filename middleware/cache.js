@@ -1,19 +1,18 @@
 // Redis caching middleware for ExpenseHub
-const Redis = require('ioredis');
+const redis = require('../lib/redis');
 
-// Initialize Redis connection (fallback if main server Redis fails)
-let redis = null;
-try {
-  redis = new Redis({
-    host: process.env.REDIS_HOST || 'localhost',
-    port: process.env.REDIS_PORT || 6379,
-    retryDelayOnFailover: 100,
-    enableReadyCheck: false,
-    maxRetriesPerRequest: null
-  });
-} catch (error) {
-  console.log('Cache middleware: Redis connection failed, caching disabled');
-}
+const shouldBypassCache = (req = {}) => {
+  const query = req.query || {};
+  const forceParam = query.force || query.nocache || query.refresh;
+  if (forceParam && ['1', 'true', true].includes(forceParam)) {
+    return true;
+  }
+  const header = req.headers ? req.headers['x-bypass-cache'] : null;
+  if (header && ['1', 'true'].includes(header)) {
+    return true;
+  }
+  return false;
+};
 
 // Cache key generators
 const generateCacheKey = (prefix, userId, params = {}) => {
@@ -30,17 +29,24 @@ const cacheMiddleware = (prefix, ttl = 300) => {
       const userId = req.session?.user?.id;
       if (!userId) return next();
       
+      const bypassCache = shouldBypassCache(req);
       const cacheKey = generateCacheKey(prefix, userId, req.query);
-      const cached = await redis.get(cacheKey);
       
-      if (cached) {
-        const data = JSON.parse(cached);
-        // Add cache headers for browser caching
-        res.set({
-          'Cache-Control': 'private, max-age=60',
-          'ETag': `"${Buffer.from(cached).toString('base64').slice(0, 16)}"`
-        });
-        return res.json(data);
+      if (!bypassCache) {
+        const cached = await redis.get(cacheKey);
+        
+        if (cached) {
+          const data = JSON.parse(cached);
+          // Add cache headers for browser caching
+          res.set({
+            'Cache-Control': 'private, max-age=60',
+            'ETag': `"${Buffer.from(cached).toString('base64').slice(0, 16)}"`,
+            'X-Data-Cache': 'HIT'
+          });
+          return res.json(data);
+        }
+      } else {
+        res.set('X-Data-Cache', 'BYPASS');
       }
       
       // Store original json method
@@ -54,7 +60,8 @@ const cacheMiddleware = (prefix, ttl = 300) => {
         // Add cache headers
         res.set({
           'Cache-Control': 'private, max-age=60',
-          'ETag': `"${Buffer.from(JSON.stringify(data)).toString('base64').slice(0, 16)}"`
+          'ETag': `"${Buffer.from(JSON.stringify(data)).toString('base64').slice(0, 16)}"`,
+          'X-Data-Cache': bypassCache ? 'REFRESH' : 'MISS'
         });
         
         // Call original json method
