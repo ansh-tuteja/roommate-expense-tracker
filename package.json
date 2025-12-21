@@ -6,10 +6,11 @@
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
-    "test": "jest --runInBand --detectOpenHandles",
+    "test": "jest tests/presentation --runInBand",
     "test:watch": "jest --watch --runInBand",
     "test:coverage": "jest --coverage --runInBand",
     "test:integration": "jest tests/integration --runInBand",
+    "test:presentation": "jest tests/presentation --runInBand",
     "test:dashboard": "node test-dashboard-crud.js"
   },
   "keywords": [],

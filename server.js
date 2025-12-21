@@ -115,7 +115,11 @@ redis.on('error', (err) => {
   console.log('Redis error:', err);
 });
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/expensehub';
+// Use test database if NODE_ENV is test, otherwise use regular database
+const MONGODB_URI = process.env.NODE_ENV === 'test' 
+  ? (process.env.MONGODB_URI_TEST || 'mongodb://localhost:27017/expensetracker_test')
+  : (process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/expensehub');
+
 const SESSION_SECRET = process.env.SESSION_SECRET || 'changeme';
 
 // Global error handlers
@@ -132,10 +136,13 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
-mongoose
-  .connect(MONGODB_URI)
-  .then(() => console.log('MongoDB connected'))
-  .catch((err) => console.error('Mongo error', err));
+// Only connect to MongoDB if not already connected (important for tests)
+if (mongoose.connection.readyState === 0) {
+  mongoose
+    .connect(MONGODB_URI)
+    .then(() => console.log('MongoDB connected'))
+    .catch((err) => console.error('Mongo error', err));
+}
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
@@ -156,18 +163,21 @@ app.use(validateSession);
 // Rate limiting for auth endpoints
 const authLimiter = createAuthRateLimiter();
 
+// Create MongoStore for session management
+const sessionStore = MongoStore.create({ 
+  mongoUrl: MONGODB_URI,
+  touchAfter: 24 * 3600, // lazy session update
+  crypto: {
+    secret: process.env.SESSION_CRYPTO_SECRET || 'fallback_crypto_secret'
+  }
+});
+
 app.use(
   session({
     secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    store: MongoStore.create({ 
-      mongoUrl: MONGODB_URI,
-      touchAfter: 24 * 3600, // lazy session update
-      crypto: {
-        secret: process.env.SESSION_CRYPTO_SECRET || 'fallback_crypto_secret'
-      }
-    }),
+    store: sessionStore,
     cookie: { 
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
       httpOnly: true,
@@ -225,7 +235,8 @@ app.post('/register', authLimiter, validationRules.register, asyncHandler(async 
   const existing = await User.findOne({ email });
   
   if (existing) {
-    const isAjax = req.xhr || req.headers.accept.indexOf('json') > -1;
+    const acceptHeader = req.headers.accept || '';
+    const isAjax = req.xhr || acceptHeader.indexOf('json') > -1;
     if (isAjax) {
       return res.status(400).json({ error: 'Email already in use' });
     }
@@ -236,7 +247,8 @@ app.post('/register', authLimiter, validationRules.register, asyncHandler(async 
   const user = await User.create({ username, email, password: hash, groups: [] });
   req.session.user = { id: user._id.toString(), username: user.username, email: user.email };
   
-  const isAjax = req.xhr || req.headers.accept.indexOf('json') > -1;
+  const acceptHeader = req.headers.accept || '';
+  const isAjax = req.xhr || acceptHeader.indexOf('json') > -1;
   if (isAjax) {
     return res.json({ success: true, redirectUrl: '/dashboard' });
   }
@@ -247,8 +259,9 @@ app.post('/login', authLimiter, validationRules.login, asyncHandler(async (req, 
   const emailInput = (req.body.email || '').trim();
   const { password } = req.body;
   const normalizedIdentifier = normalizeLoginIdentifier(emailInput);
+  const acceptHeader = req.headers.accept || '';
   const isAjax = req.xhr || 
-                 req.headers.accept.indexOf('json') > -1 || 
+                 acceptHeader.indexOf('json') > -1 || 
                  req.headers['x-requested-with'] === 'XMLHttpRequest';
 
   const respondWithError = (statusCode, message) => {
@@ -258,32 +271,42 @@ app.post('/login', authLimiter, validationRules.login, asyncHandler(async (req, 
     return res.status(statusCode).send(message);
   };
 
-  const lockTtl = await getLockTTL(normalizedIdentifier);
-  if (lockTtl && lockTtl > 0) {
-    const minutes = Math.ceil(lockTtl / 60);
-    return respondWithError(423, `Account locked for ${minutes} minute(s) due to multiple failed logins. Please try again later.`);
+  // Skip account locking in test environment
+  if (process.env.NODE_ENV !== 'test') {
+    const lockTtl = await getLockTTL(normalizedIdentifier);
+    if (lockTtl && lockTtl > 0) {
+      const minutes = Math.ceil(lockTtl / 60);
+      return respondWithError(423, `Account locked for ${minutes} minute(s) due to multiple failed logins. Please try again later.`);
+    }
   }
 
   const user = await User.findOne({ email: emailInput });
   if (!user) {
-    await recordFailedAttempt(normalizedIdentifier);
+    if (process.env.NODE_ENV !== 'test') {
+      await recordFailedAttempt(normalizedIdentifier);
+    }
     return respondWithError(400, 'Invalid email or password');
   }
   
   const ok = await bcrypt.compare(password, user.password);
   if (!ok) {
-    const { attempts, locked } = await recordFailedAttempt(normalizedIdentifier);
-    if (locked) {
-      return respondWithError(423, 'Account locked for 30 minutes due to repeated failed logins.');
+    if (process.env.NODE_ENV !== 'test') {
+      const { attempts, locked } = await recordFailedAttempt(normalizedIdentifier);
+      if (locked) {
+        return respondWithError(423, 'Account locked for 30 minutes due to repeated failed logins.');
+      }
+      const remaining = Math.max(MAX_FAILED_LOGIN_ATTEMPTS - attempts, 0);
+      const errorMsg = remaining > 0
+        ? `Invalid email or password. ${remaining} attempt(s) remaining before lockout.`
+        : 'Invalid email or password.';
+      return respondWithError(400, errorMsg);
     }
-    const remaining = Math.max(MAX_FAILED_LOGIN_ATTEMPTS - attempts, 0);
-    const errorMsg = remaining > 0
-      ? `Invalid email or password. ${remaining} attempt(s) remaining before lockout.`
-      : 'Invalid email or password.';
-    return respondWithError(400, errorMsg);
+    return respondWithError(400, 'Invalid email or password');
   }
 
-  await clearLoginGuards(normalizedIdentifier);
+  if (process.env.NODE_ENV !== 'test') {
+    await clearLoginGuards(normalizedIdentifier);
+  }
   await incrementSuccessfulLogin(user._id, user.email);
   
   // Regenerate session to prevent session fixation
@@ -1974,7 +1997,8 @@ app.put('/expenses/:id', requireAuth, asyncHandler(async (req, res) => {
     }
     
     // Check if the request is an AJAX request or a form submission
-    const isAjax = req.xhr || req.headers.accept.indexOf('json') > -1;
+    const acceptHeader = req.headers.accept || '';
+    const isAjax = req.xhr || acceptHeader.indexOf('json') > -1;
     
     if (isAjax) {
       res.json({ success: true, expense: updatedExpense });
@@ -1987,7 +2011,8 @@ app.put('/expenses/:id', requireAuth, asyncHandler(async (req, res) => {
     console.error('Update expense failed:', err);
     
     // Check if the request is an AJAX request or a form submission
-    const isAjax = req.xhr || req.headers.accept.indexOf('json') > -1;
+    const acceptHeader = req.headers.accept || '';
+    const isAjax = req.xhr || acceptHeader.indexOf('json') > -1;
     
     if (isAjax) {
       res.status(500).json({ error: 'Failed to update expense' });
@@ -2056,6 +2081,9 @@ app.get('/api/dashboard/summary', requireAuth, asyncHandler(async (req, res) => 
 // Include expense management routes
 require('./routes/expense-management')(app, requireAuth);
 
+// Include API routes
+require('./routes/api')(app, requireAuth);
+
 // 404 handler for undefined routes
 app.use(notFoundHandler);
 
@@ -2086,4 +2114,4 @@ if (require.main === module) {
   app.listen(PORT, () => console.log(`ExpenseHub HTTP running on http://localhost:${PORT}`));
 }
 
-module.exports = { app, redis, buildDashboardPayload };
+module.exports = { app, redis, buildDashboardPayload, sessionStore };

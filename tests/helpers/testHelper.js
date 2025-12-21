@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
 const User = require('../../models/User');
 const Group = require('../../models/Group');
 const Expense = require('../../models/Expense');
@@ -44,7 +45,13 @@ async function createTestUser(userData = {}) {
     phoneNumber: '1234567890'
   };
   
-  const user = new User({ ...defaultUser, ...userData });
+  const mergedData = { ...defaultUser, ...userData };
+  
+  // Hash the password before saving
+  const hashedPassword = await bcrypt.hash(mergedData.password, 10);
+  mergedData.password = hashedPassword;
+  
+  const user = new User(mergedData);
   await user.save();
   return user;
 }

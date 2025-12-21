@@ -1,0 +1,21 @@
+# Exclude dev-only and heavy folders
+node_modules
+coverage
+.git
+.azure
+.vscode
+redis-server
+
+# Tests and local scripts
+tests
+TESTING.md
+**/*.test.js
+
+# Local environment files
+.env
+.env.*
+
+# Logs and temp
+npm-debug.log*
+*.log
+*.tmp

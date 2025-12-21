@@ -111,14 +111,15 @@ const validationRules = {
     
     console.log('Sanitized values:', { email: JSON.stringify(email), password: password ? '***' : 'empty' });
     
-    // More reliable AJAX detection
+    // More reliable AJAX detection - safely check for accept header
+    const acceptHeader = req.headers.accept || '';
     const isAjax = req.xhr || 
-                   req.headers.accept.indexOf('json') > -1 || 
+                   acceptHeader.indexOf('json') > -1 || 
                    req.headers['x-requested-with'] === 'XMLHttpRequest';
     
     console.log('AJAX detection:', { 
       xhr: req.xhr, 
-      acceptHeader: req.headers.accept, 
+      acceptHeader: acceptHeader, 
       xRequestedWith: req.headers['x-requested-with'], 
       isAjax 
     });

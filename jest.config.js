@@ -14,7 +14,7 @@ module.exports = {
   coverageReporters: ['text', 'lcov', 'html'],
   testTimeout: 30000,
   verbose: true,
-  forceExit: true,
+  forceExit: false,
   clearMocks: true,
   resetMocks: true,
   restoreMocks: true,
