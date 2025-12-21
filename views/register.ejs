@@ -171,15 +171,17 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 // Handle different types of error responses
                 let errorMessage = 'Registration failed. Please try again.';
-                
+
                 if (data.error) {
-                    errorMessage = data.error;
+                    errorMessage = typeof data.error === 'string'
+                        ? data.error
+                        : (data.error.message || JSON.stringify(data.error));
                 } else if (data.message) {
                     errorMessage = data.message;
                 } else if (typeof data === 'string') {
                     errorMessage = data;
                 }
-                
+
                 console.log('Showing error:', errorMessage);
                 showError(errorMessage);
             }
