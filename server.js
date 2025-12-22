@@ -138,8 +138,15 @@ process.on('uncaughtException', (err) => {
 
 // Only connect to MongoDB if not already connected (important for tests)
 if (mongoose.connection.readyState === 0) {
+  // TLS options to fix Windows OpenSSL compatibility with Atlas
+  const mongooseOptions = {
+    tls: true,
+    tlsAllowInvalidCertificates: true,
+    serverSelectionTimeoutMS: 5000
+  };
+  
   mongoose
-    .connect(MONGODB_URI)
+    .connect(MONGODB_URI, mongooseOptions)
     .then(() => console.log('MongoDB connected'))
     .catch((err) => console.error('Mongo error', err));
 }
@@ -329,6 +336,28 @@ app.post('/login', authLimiter, validationRules.login, asyncHandler(async (req, 
       res.redirect('/dashboard');
     });
   });
+}));
+
+// Admin/developer endpoint to clear login lockouts for an email
+// - In production requires header `x-admin-token` matching ADMIN_UNLOCK_TOKEN
+// - In non-production, allowed without token
+app.post('/admin/unlock-login', asyncHandler(async (req, res) => {
+  const emailInput = (req.body.email || req.query.email || '').trim();
+  const token = req.headers['x-admin-token'] || req.body.token || req.query.token;
+
+  if (!emailInput) {
+    return res.status(400).json({ error: 'Email is required' });
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    if (!process.env.ADMIN_UNLOCK_TOKEN || token !== process.env.ADMIN_UNLOCK_TOKEN) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+  }
+
+  const identifier = normalizeLoginIdentifier(emailInput);
+  await clearLoginGuards(identifier);
+  return res.json({ success: true, email: identifier });
 }));
 
 app.post('/logout', (req, res) => {
